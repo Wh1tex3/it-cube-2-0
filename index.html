@@ -1,0 +1,1031 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Сайт для роботов — образовательная платформа</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800;900&display=swap" rel="stylesheet">
+    <link href="./styles.css" rel="stylesheet">
+  </head>
+  <body>
+    <div id="app" v-cloak>
+      <nav
+        v-if="currentSection !== 'auth'"
+        class="navbar navbar-expand-lg"
+        :class="theme === 'dark' ? 'navbar-dark bg-dark' : 'navbar-light bg-light shadow-sm'"
+      >
+        <div class="container-fluid">
+          <a class="navbar-brand" href="#" @click.prevent="goSection('instructions')">
+            <span class="navbar-logo-circle">🤖</span>
+          </a>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+          </button>
+          <div class="collapse navbar-collapse" id="mainNav">
+            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+              <li class="nav-item">
+                <a class="nav-link" :class="{ active: currentSection === 'instructions' }" href="#" @click.prevent="goSection('instructions')">
+                  Инструкции
+                </a>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link" :class="{ active: currentSection === 'statistics' }" href="#" @click.prevent="goSection('statistics')">
+                  Статистика
+                </a>
+              </li>
+              <li class="nav-item" v-if="isAdminLike">
+                <a class="nav-link" :class="{ active: currentSection === 'admin' }" href="#" @click.prevent="goSection('admin')">
+                  Панель администратора
+                </a>
+              </li>
+            </ul>
+            <div class="d-flex align-items-center gap-2">
+              <button class="btn btn-outline-secondary btn-sm theme-toggle-btn" @click="toggleTheme" :title="theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'">
+                <span v-if="theme === 'dark'">☀️</span>
+                <span v-else>🌙</span>
+              </button>
+              <div class="d-flex align-items-center gap-3 user-header-block">
+                <template v-if="currentUser">
+                  <div class="user-header-avatar" :class="{ 'avatar-letter': !getUserAvatar(currentUser) }">
+                    <img v-if="getUserAvatar(currentUser)" :src="getUserAvatar(currentUser)" class="user-header-avatar-img" alt="avatar">
+                    <span v-else class="avatar-initial">{{ getAvatarLetter(currentUser) }}</span>
+                  </div>
+                  <button type="button" class="user-header-name-btn" @click="goSection('profile')">
+                    {{ currentUser.name }} ({{ currentUserRoleLabel }})
+                  </button>
+                  <button
+                    type="button"
+                    class="btn-glossy btn-glossy-pink btn-sm btn-logout"
+                    @click="logout"
+                  >
+                    ВЫЙТИ
+                  </button>
+                </template>
+                <span v-else class="me-2">Гость</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      <main :class="currentSection === 'auth' ? 'my-0' : 'container my-4'">
+        <section v-if="currentSection === 'auth'" class="auth-page auth-screen section-animated">
+          <div class="auth-bg"></div>
+
+          <div class="container auth-container">
+            <div class="auth-layout">
+              <div
+                class="auth-left"
+                :class="{ 'auth-left--with-form': authMode !== 'choose' }"
+              >
+                <template v-if="authMode === 'choose'">
+                  <div class="auth-hero-bunch">
+                    <div class="auth-hero-text">
+                      <h1 class="auth-title">Собираем роботов<br>из LEGO WeDo 2.0</h1>
+                      <p class="auth-subtitle">Курс по робототехнике для детей 5-10 лет</p>
+                    </div>
+                    <div class="auth-primary-actions">
+                      <button
+                        type="button"
+                        class="auth-main-btn auth-main-btn-primary"
+                        @click="authMode = 'register'"
+                      >
+                        Регистрация
+                      </button>
+                      <button
+                        type="button"
+                        class="auth-main-btn auth-main-btn-secondary"
+                        @click="authMode = 'login'"
+                      >
+                        Вход
+                      </button>
+                    </div>
+                  </div>
+                </template>
+
+                <div v-else class="auth-form-card">
+                  <button type="button" class="auth-back-link" @click="authMode = 'choose'">
+                    ← Назад
+                  </button>
+
+                  <div v-if="authMode === 'login'" class="auth-panel-inner">
+                    <form @submit.prevent="handleLogin">
+                    <div class="mb-3">
+                      <label class="form-label">Логин</label>
+                      <input v-model.trim="loginForm.login" type="text" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label">Пароль</label>
+                      <input v-model.trim="loginForm.password" type="password" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label">Роль</label>
+                      <div
+                        class="pretty-select"
+                        :class="{ open: ui.openSelect === 'loginRole' }"
+                        @click.stop="toggleSelect('loginRole')"
+                      >
+                        <div class="pretty-select-toggle">
+                          <span v-text="loginRoleLabelText"></span>
+                          <span class="caret"></span>
+                        </div>
+                        <ul class="pretty-select-menu">
+                          <li
+                            class="pretty-option"
+                            :class="{ active: loginForm.role === 'user' }"
+                            @click.stop="selectLoginRole('user')"
+                          >
+                            <span class="label">Учащийся</span><span class="check">✓</span>
+                          </li>
+                          <li
+                            class="pretty-option"
+                            :class="{ active: loginForm.role === 'admin' }"
+                            @click.stop="selectLoginRole('admin')"
+                          >
+                            <span class="label">Администратор (педагог)</span><span class="check">✓</span>
+                          </li>
+                          <li
+                            class="pretty-option"
+                            :class="{ active: loginForm.role === 'moderator' }"
+                            @click.stop="selectLoginRole('moderator')"
+                          >
+                            <span class="label">Модератор</span><span class="check">✓</span>
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                    <p class="small text-muted mb-3 auth-demo-accounts">
+                      Для демонстрации:
+                      <br>Учащийся: <strong>user / user</strong>
+                      <br>Администратор: <strong>admin / admin</strong>
+                      <br>Модератор: <strong>moderator / moderator</strong>
+                    </p>
+                    <button type="submit" class="auth-submit-btn auth-submit-login">
+                      Войти
+                    </button>
+                    <p v-if="authError" class="text-danger mt-2" v-text="authError"></p>
+                    </form>
+                  </div>
+
+                  <div v-else-if="authMode === 'register'" class="auth-panel-inner">
+                    <form @submit.prevent="handleRegister">
+                    <div class="mb-3">
+                      <label class="form-label">Кто вы?</label>
+                      <div class="d-flex gap-2">
+                        <button
+                          type="button"
+                          class="btn btn-sm flex-fill"
+                          :class="registerForm.role === 'user' ? 'btn-primary' : 'btn-outline-primary'"
+                          @click="registerForm.role = 'user'"
+                        >
+                          Учащийся
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-sm flex-fill"
+                          :class="registerForm.role === 'admin' ? 'btn-primary' : 'btn-outline-primary'"
+                          @click="registerForm.role = 'admin'"
+                        >
+                          Педагог
+                        </button>
+                      </div>
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label">Фамилия</label>
+                      <input v-model.trim="registerForm.lastName" type="text" class="form-control" required placeholder="Обязательно">
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label">Имя</label>
+                      <input v-model.trim="registerForm.firstName" type="text" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label">Отчество</label>
+                      <input v-model.trim="registerForm.patronymic" type="text" class="form-control">
+                    </div>
+                    <div class="mb-3" v-if="registerForm.role === 'admin'">
+                      <label class="form-label">Название объединения</label>
+                      <input v-model.trim="registerForm.associationName" type="text" class="form-control" required>
+                    </div>
+                    <div class="mb-3" v-if="registerForm.role === 'user'">
+                      <label class="form-label">Код объединения (получить у педагога)</label>
+                      <input v-model.trim="registerForm.groupCode" type="text" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label">Логин</label>
+                      <input v-model.trim="registerForm.login" type="text" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label">Пароль</label>
+                      <input v-model.trim="registerForm.password" type="password" class="form-control" required>
+                    </div>
+                    <button type="submit" class="auth-submit-btn auth-submit-register">
+                      Зарегистрироваться
+                    </button>
+                    <p v-if="registerError" class="text-danger mt-2" v-text="registerError"></p>
+                    <p v-if="registerSuccess" class="text-success mt-2" v-text="registerSuccess"></p>
+                    </form>
+                  </div>
+                </div>
+              </div>
+
+              <div class="auth-right" aria-hidden="true">
+                <img class="auth-robots" src="./edited-photo.png" alt="">
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section v-if="currentSection === 'profile'" class="section-animated profile-section">
+          <div v-if="currentUser" class="profile-cabinet">
+            <h2 class="profile-title">
+              <span class="profile-icon">👤</span>
+              Личный кабинет
+            </h2>
+            <div class="profile-card">
+              <div class="profile-grid">
+                <div class="profile-avatar-block">
+                  <div class="profile-avatar-display" :class="{ 'avatar-letter': !getUserAvatar(currentUser) }">
+                    <img v-if="getUserAvatar(currentUser)" :src="getUserAvatar(currentUser)" alt="avatar">
+                    <span v-else class="avatar-initial">{{ getAvatarLetter(currentUser) }}</span>
+                  </div>
+                  <p class="profile-name">{{ currentUser.name }}</p>
+                  <p class="profile-role">{{ currentUserRoleLabel }}</p>
+                </div>
+                <div class="profile-stats-block">
+                  <div class="profile-stat-item">
+                    <span class="profile-stat-icon">📅</span>
+                    <div>
+                      <span class="profile-stat-value">{{ profileDaysOnPlatform }}</span>
+                      <span class="profile-stat-label">дней на платформе</span>
+                    </div>
+                  </div>
+                  <div class="profile-stat-item">
+                    <span class="profile-stat-icon">📦</span>
+                    <div>
+                      <span class="profile-stat-value">{{ userCompletedCount }}</span>
+                      <span class="profile-stat-label">инструкций собрано</span>
+                    </div>
+                  </div>
+                  <div class="profile-stat-item">
+                    <span class="profile-stat-icon">⭐</span>
+                    <div>
+                      <span class="profile-stat-value">{{ currentUser.exp || 0 }}</span>
+                      <span class="profile-stat-label">опыта</span>
+                    </div>
+                  </div>
+                  <div class="profile-stat-item">
+                    <span class="profile-stat-icon">📊</span>
+                    <div>
+                      <span class="profile-stat-value">Ур. {{ userLevel }}</span>
+                      <span class="profile-stat-label">текущий уровень</span>
+                    </div>
+                  </div>
+                  <div
+                    class="profile-stat-item"
+                    v-if="currentUser.role === 'admin' && currentGroup && currentGroup.code"
+                  >
+                    <span class="profile-stat-icon">🏫</span>
+                    <div>
+                      <span class="profile-stat-value">{{ currentGroup.code }}</span>
+                      <span class="profile-stat-label">код объединения</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="profile-form">
+                <div class="mb-4">
+                  <label class="form-label fw-bold">Пол</label>
+                  <div class="d-flex gap-3 flex-wrap">
+                    <button
+                      type="button"
+                      class="profile-option-btn"
+                      :class="{ active: (currentUser.gender || '') === 'male' }"
+                      @click="updateProfileField('gender', 'male')"
+                    >
+                      Мужской
+                    </button>
+                    <button
+                      type="button"
+                      class="profile-option-btn"
+                      :class="{ active: (currentUser.gender || '') === 'female' }"
+                      @click="updateProfileField('gender', 'female')"
+                    >
+                      Женский
+                    </button>
+                    <button
+                      type="button"
+                      class="profile-option-btn"
+                      :class="{ active: !currentUser.gender }"
+                      @click="updateProfileField('gender', '')"
+                    >
+                      Не указан
+                    </button>
+                  </div>
+                  <p class="form-text small mt-1" v-if="currentUser.role === 'user'">Аватар отображается в таблице лидеров</p>
+                </div>
+                <button type="button" class="btn-glossy btn-glossy-cyan" @click="goSection('instructions')">
+                  Вернуться к инструкциям
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section v-if="currentSection === 'instructions'" class="section-animated">
+          <!-- Hero Stats Card -->
+          <div class="hero-stats-card">
+            <div class="hero-stats-content">
+              <h2 class="hero-title">{{ heroAssociationName }}</h2>
+              <p class="hero-subtitle">{{ heroTeacherName }}</p>
+              
+              <div class="hero-stats-blocks-row">
+                <div class="hero-stat-block hero-stat-block-instructions">
+                  <span class="hero-stat-label">Инструкции</span>
+                  <span class="hero-stat-value">{{ userCompletedCount }}/{{ groupInstructions.length }}</span>
+                </div>
+                <div class="hero-stat-block hero-stat-block-exp">
+                  <span class="hero-exp-icon" title="Опыт">⭐</span>
+                  <span class="hero-stat-label">Опыт</span>
+                  <span class="hero-stat-value">{{ currentUser ? currentUser.exp : 0 }}</span>
+                </div>
+              </div>
+              <div class="xp-progress-track">
+                <div class="xp-progress-fill" :style="{ width: (groupInstructions.length ? Math.min((userCompletedCount / groupInstructions.length) * 100, 100) : 0) + '%' }"></div>
+                <div class="xp-knob" :style="{ left: (groupInstructions.length ? Math.min((userCompletedCount / groupInstructions.length) * 100, 100) : 0) + '%' }"></div>
+              </div>
+            </div>
+            <img src="./Robot2.png" class="hero-robot-image" alt="Robot Helper" onerror="this.onerror=null;this.src='./Projectlego/img/complect/betmobil_white.PNG'">
+          </div>
+
+          <div class="mb-5">
+            <div class="category-container">
+              <button 
+                v-for="(opt, index) in categoryOptions" 
+                :key="opt.value" 
+                class="category-pill"
+                :class="{ 
+                  'active': filters.category === opt.value,
+                  'category-all': opt.value === ''
+                }"
+                @click="selectFilterCategory(opt.value)"
+              >
+                {{ opt.label }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Collections Section -->
+          <div class="collections-section mb-5">
+            <div class="collections-header">
+              <h3 class="h4 fw-bold mb-3" v-if="filters.category">Коллекции: {{ currentCategoryLabel }}</h3>
+              <h3 class="h4 fw-bold mb-3" v-else>Все коллекции</h3>
+            </div>
+            
+            <div class="collections-grid">
+              <div 
+                v-for="col in filteredCollections" 
+                :key="col.id + '-' + (col.groupId || 'group-1')" 
+                class="collection-card-wrapper"
+              >
+              <div 
+                class="collection-card"
+                @click="handleCollectionClick(col)"
+                :class="{
+                  'border-primary': filters.collectionId === col.id,
+                  'active-collection': filters.collectionId === col.id,
+                  'collection-completed': isCollectionCompleted(col)
+                }"
+              >
+                <div class="collection-img-grid">
+                   <img :src="getCollectionImage(col.id, 0)" class="collection-img-item" onerror="this.style.opacity='0'">
+                   <img :src="getCollectionImage(col.id, 1)" class="collection-img-item" onerror="this.style.opacity='0'">
+                   <img :src="getCollectionImage(col.id, 2)" class="collection-img-item" onerror="this.style.opacity='0'">
+                   <img :src="getCollectionImage(col.id, 3)" class="collection-img-item" onerror="this.style.opacity='0'">
+                </div>
+                <div class="collection-title">{{ col.name }}</div>
+                <div class="collection-progress-block">
+                  <div class="collection-progress-track">
+                    <div class="collection-progress-fill" :style="{ width: collectionProgressPercent(col) + '%' }"></div>
+                  </div>
+                  <div class="collection-progress-text">{{ collectionCompletedCount(col) }} из {{ collectionInstructionCount(col.id) }} инструкций выполнено</div>
+                </div>
+              </div>
+              </div>
+            </div>
+            <div v-if="filteredCollections.length === 0" class="text-center text-muted py-4">
+              В этой категории пока нет коллекций.
+            </div>
+          </div>
+
+          <div class="instructions-header-with-filters mb-3">
+            <h3 class="h4 fw-bold mb-2">Все инструкции</h3>
+            <div class="difficulty-filter-buttons">
+              <button
+                type="button"
+                class="difficulty-filter-btn diff-all"
+                :class="{ active: !filters.difficulty }"
+                @click="selectFilterDifficulty('')"
+              >
+                Все
+              </button>
+              <button
+                type="button"
+                class="difficulty-filter-btn diff-easy"
+                :class="{ active: filters.difficulty === 'easy' }"
+                @click="selectFilterDifficulty(filters.difficulty === 'easy' ? '' : 'easy')"
+              >
+                Легко
+              </button>
+              <button
+                type="button"
+                class="difficulty-filter-btn diff-medium"
+                :class="{ active: filters.difficulty === 'medium' }"
+                @click="selectFilterDifficulty(filters.difficulty === 'medium' ? '' : 'medium')"
+              >
+                Средне
+              </button>
+              <button
+                type="button"
+                class="difficulty-filter-btn diff-hard"
+                :class="{ active: filters.difficulty === 'hard' }"
+                @click="selectFilterDifficulty(filters.difficulty === 'hard' ? '' : 'hard')"
+              >
+                Сложно
+              </button>
+            </div>
+          </div>
+          <div class="instruction-grid">
+            <div 
+              v-for="(instruction, index) in filteredInstructions" 
+              :key="instruction.id"
+              class="instr-card-new"
+              :class="{
+                'is-completed': currentUser && currentUser.completedInstructions.includes(instruction.id),
+                'diff-easy': instruction.difficulty === 'easy',
+                'diff-medium': instruction.difficulty === 'medium',
+                'diff-hard': instruction.difficulty === 'hard'
+              }"
+              @click="openInstruction(instruction)"
+              style="cursor: pointer;"
+            >
+              <div class="instr-img-wrapper">
+                <img 
+                  v-if="instruction.imageUrl" 
+                  :src="instruction.imageUrl" 
+                  class="instr-img-new" 
+                  alt="instruction"
+                  onerror="this.style.display='none'"
+                >
+                <div v-else class="instr-star-small">⭐</div>
+              </div>
+              
+              <div class="text-center w-100 px-2 mt-2">
+                <div class="instr-title-new">{{ instruction.title }}</div>
+                <div class="instr-meta-new">
+                  Макс. {{ computeMaxExp(instruction) }} опыта
+                </div>
+                <div class="instr-difficulty-badge" :class="'diff-' + instruction.difficulty">
+                  {{ difficultyLabel(instruction.difficulty) }}
+                </div>
+              </div>
+
+              <div v-if="currentUser && currentUser.completedInstructions.includes(instruction.id)" class="instr-check-badge">
+                ✔
+              </div>
+            </div>
+          </div>
+          <div v-if="filteredInstructions.length === 0" class="text-center text-muted py-5">
+            Пока нет инструкций (или они скрыты фильтрами).
+          </div>
+
+          <div class="modal fade" id="instructionModal" tabindex="-1" aria-hidden="true" ref="instructionModal">
+            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h5 class="modal-title">
+                    {{ activeInstruction ? activeInstruction.title : 'Инструкция' }}
+                  </h5>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" v-if="activeInstruction">
+                  <p class="mb-1">
+                    Категории: {{ activeInstruction.categories.join(', ') }}
+                  </p>
+                  <p class="mb-3">
+                    Сложность: {{ difficultyLabel(activeInstruction.difficulty) }}
+                  </p>
+                  <p class="mb-2">
+                    Макс. опыт: {{ computeMaxExp(activeInstruction) }}
+                  </p>
+                  <p class="mb-3">
+                    {{ activeInstruction.description || defaultInstructionDescription(activeInstruction) }}
+                  </p>
+                  <ul class="mb-3" v-if="activeInstruction.steps && activeInstruction.steps.length">
+                    <li v-for="(step, index) in activeInstruction.steps" :key="index">
+                      Шаг {{ index + 1 }}. {{ step }}
+                    </li>
+                  </ul>
+                  <hr>
+                  <div v-if="currentUser && currentUser.role === 'user'">
+                    <p class="mb-3">
+                      Когда ты выполнишь все шаги вместе с педагогом, сначала нажми «Я выполнил инструкцию»,
+                      а затем позови преподавателя, чтобы он ввёл код подтверждения.
+                    </p>
+                    <div class="mb-3 d-flex flex-wrap gap-2">
+                      <button type="button" class="btn btn-outline-secondary">
+                        Я выполнил инструкцию
+                      </button>
+                      <button type="button" class="btn btn-success" @click="completeInstructionWithCode">
+                        Отметить
+                      </button>
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label">Код подтверждения от преподавателя</label>
+                      <input
+                        v-model.trim="completionForm.confirmCode"
+                        type="text"
+                        class="form-control"
+                        placeholder="Например, 123456"
+                      >
+                    </div>
+                    <p v-if="completionForm.error" class="text-danger mb-0">
+                      {{ completionForm.error }}
+                    </p>
+                  </div>
+                  <div v-else>
+                    <h6 class="mb-2">Завершение инструкции</h6>
+                    <form @submit.prevent="completeInstruction">
+                      <div class="mb-3">
+                        <label class="form-label">Полученный опыт</label>
+                        <input
+                          type="number"
+                          class="form-control"
+                          v-model.number="completionForm.earnedExp"
+                          :min="0"
+                          :max="computeMaxExp(activeInstruction)"
+                          required
+                        >
+                      </div>
+                      <button type="submit" class="btn btn-success">
+                        Сохранить результат
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section v-if="currentSection === 'statistics'" class="section-animated">
+          <div v-if="!currentUser" class="alert alert-info rounded-4 border-0 shadow-sm">
+            Для просмотра статистики необходимо выполнить авторизацию.
+          </div>
+
+          <div v-if="currentUser">
+            <div class="row g-4 mb-5">
+              <div class="col-lg-4" v-if="currentUser.role === 'user'">
+                <div class="stat-card-game h-100" style="border-bottom-color: var(--game-pink);">
+                  <h2>Твой опыт</h2>
+                  <div class="value">{{ currentUser.exp }}</div>
+                  <div class="badge bg-light text-dark rounded-pill">опыт</div>
+                </div>
+              </div>
+              <div class="col-lg-4" v-if="currentUser.role === 'user'">
+                <div class="stat-card-game h-100" style="border-bottom-color: var(--game-cyan);">
+                  <h2>Твой уровень</h2>
+                  <div class="value">{{ userLevel }}</div>
+                  <div class="badge bg-light text-dark rounded-pill">уровень</div>
+                </div>
+              </div>
+
+              <div class="col-lg-4" v-if="isAdminLike">
+                <div class="stat-card-game h-100" style="border-bottom-color: var(--game-cyan);">
+                  <h2>Учащихся</h2>
+                  <div class="value">{{ groupUsers.length }}</div>
+                  <div class="text-muted small">Средний опыт: {{ groupAverageExp }}</div>
+                </div>
+              </div>
+
+              <div class="col-lg-4" v-if="currentUser && currentUser.role === 'moderator'">
+                <div class="stat-card-game h-100" style="border-bottom-color: var(--game-yellow);">
+                  <h2>Всего опыт</h2>
+                  <div class="value">{{ allTotalExp }}</div>
+                  <div class="text-muted small">{{ allStudents.length }} учеников</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-4">
+              <div class="leaderboard-header-section text-center mb-4">
+                <h3 class="leaderboard-title d-flex align-items-center justify-content-center fw-900 mb-3">
+                  <span class="me-2">🏆</span> Таблица лидеров
+                </h3>
+                <div class="leaderboard-league-tabs d-flex justify-content-center">
+                <button 
+                  type="button" 
+                  class="league-tab-btn"
+                  :class="{ active: leaderboardLeague === 'junior' }"
+                  @click="leaderboardLeague = 'junior'"
+                >
+                  Младшая лига
+                </button>
+                <button 
+                  type="button" 
+                  class="league-tab-btn"
+                  :class="{ active: leaderboardLeague === 'senior' }"
+                  @click="leaderboardLeague = 'senior'"
+                >
+                  Старшая лига
+                </button>
+              </div>
+              </div>
+
+              <div v-if="leaderboardLeague === 'junior'" class="leaderboard-container">
+                <div class="leaderboard-item d-none d-md-grid bg-transparent shadow-none py-2 mb-0 border-0 leaderboard-header leaderboard-3cols">
+                  <div class="leaderboard-col-place">Место</div>
+                  <div class="leaderboard-col-participant">Участник</div>
+                  <div class="leaderboard-col-value">Уровень</div>
+                </div>
+                <div v-for="(u, index) in leaderboardJuniorSorted" 
+                     :key="u.id" 
+                     class="leaderboard-item leaderboard-3cols"
+                     :class="['rank-' + (index + 1), { 'is-current-user': currentUser && u.id === currentUser.id }]">
+                  <div class="leaderboard-col-place">
+                    <div class="rank-circle">
+                      <span v-if="index === 0">🥇</span>
+                      <span v-else-if="index === 1">🥈</span>
+                      <span v-else-if="index === 2">🥉</span>
+                      <span v-else>{{ index + 1 }}</span>
+                    </div>
+                  </div>
+                  <div class="leaderboard-col-participant d-flex align-items-center">
+                    <div class="leaderboard-avatar-with-badge">
+                      <span v-if="index === 0" class="rank-badge rank-badge-1">👑</span>
+                      <span v-else-if="index === 1" class="rank-badge rank-badge-2">🥈</span>
+                      <span v-else-if="index === 2" class="rank-badge rank-badge-3">🥉</span>
+                      <div class="user-avatar-wrapper" :class="{ 'avatar-letter': !getUserAvatar(u) }">
+                        <img v-if="getUserAvatar(u)" :src="getUserAvatar(u)" class="user-avatar" alt="avatar">
+                        <span v-else class="avatar-initial user-avatar-initial">{{ getAvatarLetter(u) }}</span>
+                      </div>
+                    </div>
+                    <div class="user-name ms-3">{{ u.name }}</div>
+                  </div>
+                  <div class="leaderboard-col-value d-flex align-items-center justify-content-end">
+                    <div class="leaderboard-user-charge">
+                      <div class="charge-dots-row">
+                        <span
+                          v-for="n in 5"
+                          :key="'jd-' + u.id + '-' + n"
+                          class="charge-dot"
+                          :class="{ filled: (getUserCompletedCount(u) % 5) >= n }"
+                        ></span>
+                      </div>
+                    </div>
+                    <span class="level-badge" :style="{ background: index < 3 ? 'var(--game-cyan)' : '#3b82f6' }">
+                      Ур. {{ getUserLevel(u) }}
+                    </span>
+                  </div>
+                </div>
+                <div v-if="leaderboardStudents.length === 0" class="text-center text-muted py-5">
+                  В таблице пока нет участников.
+                </div>
+              </div>
+
+              <div v-if="leaderboardLeague === 'senior'" class="leaderboard-container">
+                <div class="leaderboard-item d-none d-md-grid bg-transparent shadow-none py-2 mb-0 border-0 leaderboard-header leaderboard-3cols">
+                  <div class="leaderboard-col-place">Место</div>
+                  <div class="leaderboard-col-participant">Участник</div>
+                  <div class="leaderboard-col-value">Опыт</div>
+                </div>
+                <div v-for="(u, index) in leaderboardSeniorSorted" 
+                     :key="u.id" 
+                     class="leaderboard-item leaderboard-3cols"
+                     :class="['rank-' + (index + 1), { 'is-current-user': currentUser && u.id === currentUser.id }]">
+                  <div class="leaderboard-col-place">
+                    <div class="rank-circle">
+                      <span v-if="index === 0">🥇</span>
+                      <span v-else-if="index === 1">🥈</span>
+                      <span v-else-if="index === 2">🥉</span>
+                      <span v-else>{{ index + 1 }}</span>
+                    </div>
+                  </div>
+                  <div class="leaderboard-col-participant d-flex align-items-center">
+                    <div class="leaderboard-avatar-with-badge">
+                      <span v-if="index === 0" class="rank-badge rank-badge-1">👑</span>
+                      <span v-else-if="index === 1" class="rank-badge rank-badge-2">🥈</span>
+                      <span v-else-if="index === 2" class="rank-badge rank-badge-3">🥉</span>
+                      <div class="user-avatar-wrapper" :class="{ 'avatar-letter': !getUserAvatar(u) }">
+                        <img v-if="getUserAvatar(u)" :src="getUserAvatar(u)" class="user-avatar" alt="avatar">
+                        <span v-else class="avatar-initial user-avatar-initial">{{ getAvatarLetter(u) }}</span>
+                      </div>
+                    </div>
+                    <div class="user-name ms-3">{{ u.name }}</div>
+                  </div>
+                  <div class="leaderboard-col-value d-flex align-items-center justify-content-end">
+                    <div class="leaderboard-user-charge">
+                      <div class="charge-dots-row">
+                        <span
+                          v-for="n in 5"
+                          :key="'sd-' + u.id + '-' + n"
+                          class="charge-dot"
+                          :class="{ filled: (getUserCompletedCount(u) % 5) >= n }"
+                        ></span>
+                      </div>
+                    </div>
+                    <div class="xp-badge">{{ u.exp || 0 }}</div>
+                  </div>
+                </div>
+                <div v-if="leaderboardStudents.length === 0" class="text-center text-muted py-5">
+                  В таблице пока нет участников.
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section v-if="currentSection === 'admin'" class="section-animated admin-section">
+          <div v-if="!isAdminLike" class="alert alert-warning">
+            Доступ к панели администратора имеют только педагоги и модератор.
+          </div>
+
+          <div v-if="isAdminLike">
+            <ul class="nav nav-tabs mb-3" role="tablist">
+              <li class="nav-item" role="presentation">
+                <button class="nav-link" :class="{ active: adminTab === 'instructions' }" type="button" @click="adminTab = 'instructions'">
+                  Инструкции
+                </button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link" :class="{ active: adminTab === 'collections' }" type="button" @click="adminTab = 'collections'">
+                  Коллекции
+                </button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link" :class="{ active: adminTab === 'users' }" type="button" @click="adminTab = 'users'">
+                  Пользователи
+                </button>
+              </li>
+              <li class="nav-item" role="presentation" v-if="currentUser.role === 'admin'">
+                <button class="nav-link" :class="{ active: adminTab === 'confirmCode' }" type="button" @click="adminTab = 'confirmCode'">
+                  Код подтверждения
+                </button>
+              </li>
+              <li class="nav-item" role="presentation" v-if="currentUser.role === 'moderator'">
+                <button class="nav-link" :class="{ active: adminTab === 'admins' }" type="button" @click="adminTab = 'admins'">
+                  Администраторы
+                </button>
+              </li>
+            </ul>
+
+            <div v-if="adminTab === 'instructions'">
+              <div class="row g-4">
+                <div class="col-lg-6">
+                  <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                      <h2 class="h5 mb-3">Новая инструкция</h2>
+                      <form @submit.prevent="createInstruction">
+                        <div class="mb-3">
+                          <label class="form-label">Название</label>
+                          <input v-model.trim="instructionForm.title" type="text" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                          <label class="form-label">Категории (через запятую)</label>
+                          <input v-model.trim="instructionForm.categories" type="text" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                          <label class="form-label">Коллекция</label>
+                          <select v-model="instructionForm.collectionId" class="form-select">
+                            <option value="">Без коллекции</option>
+                            <option v-for="collection in groupCollections" :key="collection.id" :value="collection.id">
+                              {{ collection.name }}
+                            </option>
+                          </select>
+                        </div>
+                        <div class="row">
+                          <div class="col-md-3 mb-3">
+                            <label class="form-label">Слайды</label>
+                            <input v-model.number="instructionForm.slides" type="number" min="1" class="form-control" required>
+                          </div>
+                          <div class="col-md-3 mb-3">
+                            <label class="form-label">Слож. этапы</label>
+                            <input v-model.number="instructionForm.complexConnections" type="number" min="0" class="form-control" required>
+                          </div>
+                        </div>
+                      <div class="mb-3 admin-exp-preview">
+                        <label class="form-label fw-bold">Расчёт опыта по слайдам</label>
+                        <p class="small mb-1">
+                          Слайды: {{ instructionForm.slides }}, сложность: {{ difficultyLabel(instructionForm.difficulty) }}.
+                        </p>
+                        <p class="small mb-1">
+                          Максимальный опыт за инструкцию: <strong>{{ instructionFormPreviewMaxExp }}</strong>.
+                        </p>
+                        <p class="form-text">
+                          Значение автоматически считается по числу слайдов и отмеченным бонусам.
+                        </p>
+                      </div>
+                        <div class="mb-3">
+                          <label class="form-label">Сложность</label>
+                          <select v-model="instructionForm.difficulty" class="form-select" required>
+                            <option value="easy">Лёгкий уровень</option>
+                            <option value="medium">Средний уровень</option>
+                            <option value="hard">Сложный уровень</option>
+                          </select>
+                        </div>
+                        <div class="mb-3">
+                          <label class="form-label">Ссылка на изображение</label>
+                          <input v-model.trim="instructionForm.imageUrl" type="url" class="form-control" placeholder="https://...">
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                          Добавить инструкцию
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-lg-6">
+                  <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                      <h2 class="h5 mb-3">Список инструкций</h2>
+                      <div class="table-responsive">
+                        <table class="table table-sm align-middle">
+                          <thead>
+                            <tr>
+                              <th>Название</th>
+                              <th>Категории</th>
+                              <th>Слайды</th>
+                              <th>Сложность</th>
+                              <th>Макс. опыт</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr v-for="instruction in groupInstructions" :key="instruction.id">
+                              <td>{{ instruction.title }}</td>
+                              <td>{{ instruction.categories.join(', ') }}</td>
+                              <td>{{ instruction.slidesCount || instruction.slides }}</td>
+                              <td>{{ difficultyLabel(instruction.difficulty) }}</td>
+                              <td>{{ computeMaxExp(instruction) }}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="adminTab === 'collections'">
+              <div class="row g-4">
+                <div class="col-lg-5">
+                  <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                      <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h2 class="h5 mb-0">Новая коллекция</h2>
+                        <button type="button" class="btn btn-outline-primary btn-sm" @click="runImportNow">
+                          Импортировать из Projectlego
+                        </button>
+                      </div>
+                      <form @submit.prevent="createCollection">
+                        <div class="mb-3">
+                          <label class="form-label">Название коллекции</label>
+                          <input v-model.trim="collectionForm.name" type="text" class="form-control" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                          Добавить коллекцию
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-lg-7">
+                  <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                      <h2 class="h5 mb-3">Существующие коллекции</h2>
+                      <div class="table-responsive">
+                        <table class="table table-sm align-middle">
+                          <thead>
+                            <tr>
+                              <th>Название</th>
+                              <th>Инструкций</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr v-for="collection in groupCollections" :key="collection.id">
+                              <td>{{ collection.name }}</td>
+                              <td>{{ collectionInstructionCount(collection.id) }}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="adminTab === 'users'" class="admin-tab-content">
+              <div class="admin-card admin-card-users">
+                <h2 class="admin-card-title">Пользователи образовательного пространства</h2>
+                <div class="table-responsive">
+                  <table class="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Имя</th>
+                        <th>Логин</th>
+                        <th>Роль</th>
+                        <th>Опыт</th>
+                        <th>Действия</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(u, idx) in groupUsers" :key="u.id" class="admin-table-row" :style="{ animationDelay: (idx * 0.03) + 's' }">
+                        <td>{{ u.name }}</td>
+                        <td>{{ u.login }}</td>
+                        <td><span class="admin-role-badge" :class="'role-' + u.role">{{ roleLabel(u.role) }}</span></td>
+                        <td><span class="admin-exp-badge">{{ u.exp }}</span></td>
+                        <td>
+                          <button class="btn-admin btn-admin-danger btn-sm" @click="deleteUser(u)">
+                            Удалить
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="adminTab === 'confirmCode' && currentUser.role === 'admin'" class="admin-tab-content">
+              <div class="admin-card">
+                <h2 class="admin-card-title">Код подтверждения</h2>
+                <p class="mb-3">
+                  Этот код преподаватель вводит у ученика после выполнения инструкции, чтобы начислить опыт и закрасить карточку.
+                </p>
+                <div class="d-flex align-items-center gap-3 mb-3">
+                  <div v-if="teacherCurrentConfirmCode" class="confirm-code-display">
+                    {{ teacherCurrentConfirmCode }}
+                  </div>
+                  <span v-else class="text-muted">Код ещё не сгенерирован.</span>
+                </div>
+                <button type="button" class="btn btn-primary" @click="generateTeacherConfirmCode">
+                  Получить новый
+                </button>
+              </div>
+            </div>
+
+            <div v-if="adminTab === 'admins' && currentUser.role === 'moderator'" class="admin-tab-content">
+              <div class="admin-card admin-card-admins">
+                <h2 class="admin-card-title">Администраторы сайта</h2>
+                <div class="table-responsive">
+                  <table class="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Имя</th>
+                        <th>Логин</th>
+                        <th>Опыт</th>
+                        <th>Активен до</th>
+                        <th>Действия</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(a, idx) in allAdmins" :key="a.id" class="admin-table-row" :style="{ animationDelay: (idx * 0.03) + 's' }">
+                        <td>{{ a.name }}</td>
+                        <td>{{ a.login }}</td>
+                        <td><span class="admin-exp-badge">{{ a.exp }}</span></td>
+                        <td>
+                          <div class="admin-date-cell">
+                            <input
+                              type="date"
+                              class="admin-date-input"
+                              :value="formatDateForInput(a.activeUntil)"
+                              @change="setUserActiveUntil(a, $event.target.value)"
+                              title="Выбрать дату"
+                            >
+                          </div>
+                        </td>
+                        <td>
+                          <button class="btn-admin btn-admin-danger btn-sm" @click="deleteUser(a)">
+                            Удалить
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
