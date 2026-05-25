@@ -745,17 +745,17 @@
                      :class="['rank-' + (index + 1), { 'is-current-user': currentUser && u.id === currentUser.id }]">
                   <div class="leaderboard-col-place">
                     <div class="rank-circle">
-                      <span v-if="index === 0">🥇</span>
-                      <span v-else-if="index === 1">🥈</span>
-                      <span v-else-if="index === 2">🥉</span>
+                      <span v-if="index === 0" class="rank-place-icon rank-place-icon-1"></span>
+                      <span v-else-if="index === 1" class="rank-place-icon rank-place-icon-2"></span>
+                      <span v-else-if="index === 2" class="rank-place-icon rank-place-icon-3"></span>
                       <span v-else>{{ index + 1 }}</span>
                     </div>
                   </div>
                   <div class="leaderboard-col-participant d-flex align-items-center">
                     <div class="leaderboard-avatar-with-badge">
-                      <span v-if="index === 0" class="rank-badge rank-badge-1">👑</span>
-                      <span v-else-if="index === 1" class="rank-badge rank-badge-2">🥈</span>
-                      <span v-else-if="index === 2" class="rank-badge rank-badge-3">🥉</span>
+                      <span v-if="index === 0" class="rank-badge rank-badge-1"></span>
+                      <span v-else-if="index === 1" class="rank-badge rank-badge-2"></span>
+                      <span v-else-if="index === 2" class="rank-badge rank-badge-3"></span>
                       <div class="user-avatar-wrapper" :class="{ 'avatar-letter': !getUserAvatar(u) }">
                         <img v-if="getUserAvatar(u)" :src="getUserAvatar(u)" class="user-avatar" alt="avatar">
                         <span v-else class="avatar-initial user-avatar-initial">{{ getAvatarLetter(u) }}</span>
@@ -796,17 +796,17 @@
                      :class="['rank-' + (index + 1), { 'is-current-user': currentUser && u.id === currentUser.id }]">
                   <div class="leaderboard-col-place">
                     <div class="rank-circle">
-                      <span v-if="index === 0">🥇</span>
-                      <span v-else-if="index === 1">🥈</span>
-                      <span v-else-if="index === 2">🥉</span>
+                      <span v-if="index === 0" class="rank-place-icon rank-place-icon-1"></span>
+                      <span v-else-if="index === 1" class="rank-place-icon rank-place-icon-2"></span>
+                      <span v-else-if="index === 2" class="rank-place-icon rank-place-icon-3"></span>
                       <span v-else>{{ index + 1 }}</span>
                     </div>
                   </div>
                   <div class="leaderboard-col-participant d-flex align-items-center">
                     <div class="leaderboard-avatar-with-badge">
-                      <span v-if="index === 0" class="rank-badge rank-badge-1">👑</span>
-                      <span v-else-if="index === 1" class="rank-badge rank-badge-2">🥈</span>
-                      <span v-else-if="index === 2" class="rank-badge rank-badge-3">🥉</span>
+                      <span v-if="index === 0" class="rank-badge rank-badge-1"></span>
+                      <span v-else-if="index === 1" class="rank-badge rank-badge-2"></span>
+                      <span v-else-if="index === 2" class="rank-badge rank-badge-3"></span>
                       <div class="user-avatar-wrapper" :class="{ 'avatar-letter': !getUserAvatar(u) }">
                         <img v-if="getUserAvatar(u)" :src="getUserAvatar(u)" class="user-avatar" alt="avatar">
                         <span v-else class="avatar-initial user-avatar-initial">{{ getAvatarLetter(u) }}</span>

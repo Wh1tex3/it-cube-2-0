@@ -545,24 +545,152 @@ body {
 }
 
 /* Короны и медали — по центру над кругом, на первом плане */
+.leaderboard-avatar-with-badge .user-avatar-wrapper {
+  margin-right: 0;
+}
+
+.rank-badge,
+.rank-place-icon {
+  display: inline-block;
+  position: relative;
+  flex: 0 0 auto;
+}
+
 .rank-badge {
   position: absolute;
   left: 50%;
-  transform: translateX(-50%);
   z-index: 10;
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
-  text-align: center;
+  transform: translateX(-50%);
   pointer-events: none;
 }
 
 .rank-badge-1 {
-  top: -36px;
-  font-size: 2rem;
+  top: -31px;
+  width: 48px;
+  height: 34px;
+  filter: drop-shadow(0 5px 6px rgba(120, 53, 15, 0.35));
 }
 
-.rank-badge-2, .rank-badge-3 {
+.rank-badge-1::before {
+  content: "";
+  position: absolute;
+  inset: 0 2px 6px;
+  background:
+    radial-gradient(circle at 20% 40%, #ef4444 0 3px, transparent 4px),
+    radial-gradient(circle at 50% 30%, #38bdf8 0 3px, transparent 4px),
+    radial-gradient(circle at 80% 40%, #a855f7 0 3px, transparent 4px),
+    linear-gradient(135deg, #fff7ad 0%, #facc15 32%, #f59e0b 60%, #fff3a3 100%);
+  clip-path: polygon(3% 86%, 11% 28%, 31% 58%, 50% 6%, 69% 58%, 89% 28%, 97% 86%, 97% 100%, 3% 100%);
+}
+
+.rank-badge-1::after {
+  content: "";
+  position: absolute;
+  left: 9px;
+  right: 9px;
+  bottom: 2px;
+  height: 10px;
+  border-radius: 4px 4px 7px 7px;
+  background: linear-gradient(180deg, #fde68a 0%, #f59e0b 60%, #b45309 100%);
+  box-shadow: inset 0 2px 2px rgba(255, 255, 255, 0.55);
+}
+
+.rank-badge-2,
+.rank-badge-3 {
   top: -30px;
-  font-size: 1.3rem;
+  width: 34px;
+  height: 42px;
+  filter: drop-shadow(0 4px 6px rgba(15, 23, 42, 0.25));
+}
+
+.rank-badge-2::before,
+.rank-badge-3::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 8px;
+  width: 18px;
+  height: 18px;
+  background: linear-gradient(135deg, #ef4444 0 50%, #2563eb 50% 100%);
+  clip-path: polygon(0 0, 100% 0, 78% 100%, 50% 74%, 22% 100%);
+}
+
+.rank-badge-2::after,
+.rank-badge-3::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  bottom: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  box-shadow: inset 0 3px 4px rgba(255,255,255,0.65), inset 0 -3px 5px rgba(15,23,42,0.16);
+}
+
+.rank-badge-2::after {
+  background:
+    radial-gradient(circle at 35% 28%, rgba(255,255,255,0.9) 0 4px, transparent 5px),
+    linear-gradient(135deg, #f8fafc 0%, #cbd5e1 45%, #64748b 100%);
+}
+
+.rank-badge-3::after {
+  background:
+    radial-gradient(circle at 35% 28%, rgba(255,255,255,0.75) 0 4px, transparent 5px),
+    linear-gradient(135deg, #fed7aa 0%, #c2410c 58%, #7c2d12 100%);
+}
+
+.rank-place-icon {
+  width: 30px;
+  height: 30px;
+}
+
+.rank-place-icon::before,
+.rank-place-icon::after {
+  content: "";
+  position: absolute;
+}
+
+.rank-place-icon-1::before {
+  inset: 2px 4px 8px;
+  background: linear-gradient(135deg, #fff7ad 0%, #facc15 36%, #f59e0b 72%, #fff3a3 100%);
+  clip-path: polygon(3% 85%, 12% 28%, 31% 58%, 50% 5%, 69% 58%, 88% 28%, 97% 85%, 97% 100%, 3% 100%);
+}
+
+.rank-place-icon-1::after {
+  left: 8px;
+  right: 8px;
+  bottom: 5px;
+  height: 7px;
+  border-radius: 3px 3px 5px 5px;
+  background: linear-gradient(180deg, #fde68a 0%, #f59e0b 70%, #b45309 100%);
+}
+
+.rank-place-icon-2::before,
+.rank-place-icon-3::before {
+  top: 0;
+  left: 8px;
+  width: 14px;
+  height: 13px;
+  background: linear-gradient(135deg, #ef4444 0 50%, #2563eb 50% 100%);
+  clip-path: polygon(0 0, 100% 0, 75% 100%, 50% 76%, 25% 100%);
+}
+
+.rank-place-icon-2::after,
+.rank-place-icon-3::after {
+  left: 4px;
+  bottom: 1px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  box-shadow: inset 0 3px 4px rgba(255,255,255,0.65), inset 0 -3px 5px rgba(15,23,42,0.16);
+}
+
+.rank-place-icon-2::after {
+  background: linear-gradient(135deg, #f8fafc 0%, #cbd5e1 45%, #64748b 100%);
+}
+
+.rank-place-icon-3::after {
+  background: linear-gradient(135deg, #fed7aa 0%, #c2410c 58%, #7c2d12 100%);
 }
 
 .crown-icon {
