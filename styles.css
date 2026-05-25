@@ -137,7 +137,7 @@ body {
   height: 180px;
   border-radius: 20px;
   overflow: hidden;
-  background: rgba(255,255,255,0.35);
+  background: rgba(255,255,255,0.16);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -147,8 +147,8 @@ body {
 .instr-img-new {
   width: 100%;
   height: 100%;
-  object-fit: contain;
-  background: #ffffff;
+  object-fit: cover;
+  background: transparent;
   transition: transform 0.3s ease;
 }
 
@@ -1807,10 +1807,10 @@ body:has(.auth-screen) {
 .collection-img-item {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   transition: transform 0.3s ease;
   border-radius: 12px;
-  background: white;
+  background: rgba(255,255,255,0.16);
 }
 
 .collection-card:hover .collection-img-item {
@@ -2521,29 +2521,196 @@ body:has(.auth-screen) {
   color: #64748b;
 }
 
-.instruction-gallery {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 1rem;
+.instruction-slider {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  touch-action: pan-y;
 }
 
-.instruction-gallery-frame {
+.instruction-slide-frame {
+  position: relative;
+  width: 100%;
+  min-height: 300px;
   border-radius: 22px;
   background: #94a3b8;
   padding: 22px;
-  min-height: 220px;
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: zoom-in;
+  user-select: none;
+  overflow: hidden;
 }
 
-.instruction-gallery-img {
+.instruction-slide-img {
   width: 100%;
-  aspect-ratio: 4 / 3;
+  max-height: min(62vh, 560px);
+  aspect-ratio: 16 / 10;
   object-fit: contain;
-  background: #ffffff;
   border-radius: 18px;
   display: block;
+}
+
+.instruction-slide-btn,
+.instruction-fullscreen-nav,
+.instruction-fullscreen-close {
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+}
+
+.instruction-slide-btn {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.58);
+  color: #ffffff;
+  font-size: 2rem;
+  transform: translateY(-50%);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.24);
+}
+
+.instruction-slide-prev {
+  left: 14px;
+}
+
+.instruction-slide-next {
+  right: 14px;
+}
+
+.instruction-slidebar {
+  max-width: 100%;
+  display: flex;
+  gap: 0.45rem;
+  overflow-x: auto;
+  padding: 0.15rem 0.25rem 0.35rem;
+  scrollbar-width: none;
+  touch-action: pan-x;
+}
+
+.instruction-slidebar::-webkit-scrollbar {
+  display: none;
+}
+
+.instruction-slide-dot {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 8px;
+  border: none;
+  border-radius: 999px;
+  background: #cbd5e1;
+  transition: width 0.2s ease, background 0.2s ease;
+}
+
+.instruction-slide-dot.active {
+  width: 54px;
+  background: #06b6d4;
+}
+
+.instruction-slide-counter {
+  color: #64748b;
+  font-weight: 800;
+  font-size: 0.9rem;
+}
+
+.instruction-fullscreen-open {
+  overflow: hidden;
+}
+
+.instruction-fullscreen-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(15, 23, 42, 0.96);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 72px 76px;
+  touch-action: pan-y;
+}
+
+.instruction-fullscreen-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 16px;
+  user-select: none;
+}
+
+.instruction-fullscreen-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  font-size: 2rem;
+}
+
+.instruction-fullscreen-nav {
+  position: absolute;
+  top: 50%;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  font-size: 2.4rem;
+  transform: translateY(-50%);
+}
+
+.instruction-fullscreen-prev {
+  left: 18px;
+}
+
+.instruction-fullscreen-next {
+  right: 18px;
+}
+
+.instruction-fullscreen-counter {
+  position: absolute;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  color: #ffffff;
+  font-weight: 900;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  padding: 0.45rem 0.9rem;
+}
+
+@media (max-width: 768px) {
+  .instruction-slide-frame {
+    min-height: 240px;
+    padding: 14px;
+  }
+
+  .instruction-slide-img {
+    aspect-ratio: 4 / 3;
+  }
+
+  .instruction-slide-btn {
+    width: 38px;
+    height: 38px;
+    font-size: 1.6rem;
+  }
+
+  .instruction-fullscreen-viewer {
+    padding: 64px 14px 58px;
+  }
+
+  .instruction-fullscreen-nav {
+    display: none;
+  }
 }
 
 .confirm-code-display {

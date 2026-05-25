@@ -81,6 +81,10 @@ const App = {
         name: "",
       },
       activeInstruction: null,
+      activeInstructionImageIndex: 0,
+      fullscreenInstructionImage: false,
+      touchStartX: 0,
+      touchStartY: 0,
       completionForm: {
         earnedExp: 0,
         confirmCode: "",
@@ -403,6 +407,61 @@ const App = {
     primaryInstructionImage(instruction) {
       const images = this.instructionImages(instruction);
       return images.length ? images[0].url : "";
+    },
+    activeInstructionImages() {
+      return this.instructionImages(this.activeInstruction);
+    },
+    activeInstructionImage() {
+      const images = this.activeInstructionImages();
+      if (!images.length) return null;
+      const index = Math.min(Math.max(this.activeInstructionImageIndex, 0), images.length - 1);
+      return images[index] || images[0];
+    },
+    setInstructionImage(index) {
+      const images = this.activeInstructionImages();
+      if (!images.length) {
+        this.activeInstructionImageIndex = 0;
+        return;
+      }
+      const last = images.length - 1;
+      this.activeInstructionImageIndex = Math.min(Math.max(index, 0), last);
+    },
+    showNextInstructionImage() {
+      const images = this.activeInstructionImages();
+      if (images.length <= 1) return;
+      this.activeInstructionImageIndex = (this.activeInstructionImageIndex + 1) % images.length;
+    },
+    showPrevInstructionImage() {
+      const images = this.activeInstructionImages();
+      if (images.length <= 1) return;
+      this.activeInstructionImageIndex = (this.activeInstructionImageIndex - 1 + images.length) % images.length;
+    },
+    openFullscreenInstructionImage() {
+      if (!this.activeInstructionImage()) return;
+      this.fullscreenInstructionImage = true;
+      document.body.classList.add("instruction-fullscreen-open");
+    },
+    closeFullscreenInstructionImage() {
+      this.fullscreenInstructionImage = false;
+      document.body.classList.remove("instruction-fullscreen-open");
+    },
+    handleInstructionTouchStart(event) {
+      const touch = event.touches && event.touches[0];
+      if (!touch) return;
+      this.touchStartX = touch.clientX;
+      this.touchStartY = touch.clientY;
+    },
+    handleInstructionTouchEnd(event) {
+      const touch = event.changedTouches && event.changedTouches[0];
+      if (!touch) return;
+      const deltaX = touch.clientX - this.touchStartX;
+      const deltaY = touch.clientY - this.touchStartY;
+      if (Math.abs(deltaX) < 40 || Math.abs(deltaX) < Math.abs(deltaY)) return;
+      if (deltaX < 0) {
+        this.showNextInstructionImage();
+      } else {
+        this.showPrevInstructionImage();
+      }
     },
     goSection(section) {
       if (section === "profile" && !this.currentUser) {
@@ -978,6 +1037,9 @@ const App = {
     },
     openInstruction(instruction) {
       this.activeInstruction = instruction;
+      this.activeInstructionImageIndex = 0;
+      this.fullscreenInstructionImage = false;
+      document.body.classList.remove("instruction-fullscreen-open");
       const maxExp = this.computeMaxExp(instruction);
       this.completionForm.earnedExp = maxExp;
       this.completionForm.confirmCode = "";

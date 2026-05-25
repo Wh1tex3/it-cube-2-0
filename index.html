@@ -519,18 +519,94 @@
                   <p class="mb-2">
                     Макс. опыт: {{ computeMaxExp(activeInstruction) }}
                   </p>
-                  <div v-if="instructionImages(activeInstruction).length" class="instruction-gallery mb-3">
+                  <div v-if="activeInstructionImages().length" class="instruction-slider mb-3">
                     <div
-                      v-for="(image, index) in instructionImages(activeInstruction)"
-                      :key="image.path || image.url || index"
-                      class="instruction-gallery-frame"
+                      class="instruction-slide-frame"
+                      @touchstart="handleInstructionTouchStart"
+                      @touchend="handleInstructionTouchEnd"
+                      @click="openFullscreenInstructionImage"
                     >
+                      <button
+                        v-if="activeInstructionImages().length > 1"
+                        type="button"
+                        class="instruction-slide-btn instruction-slide-prev"
+                        @click.stop="showPrevInstructionImage"
+                        aria-label="Предыдущее изображение"
+                      >
+                        ‹
+                      </button>
                       <img
-                        :src="image.url"
-                        :alt="image.name || activeInstruction.title"
-                        class="instruction-gallery-img"
+                        :src="activeInstructionImage().url"
+                        :alt="activeInstructionImage().name || activeInstruction.title"
+                        class="instruction-slide-img"
                         @error="onInstructionImageError($event, activeInstruction)"
                       >
+                      <button
+                        v-if="activeInstructionImages().length > 1"
+                        type="button"
+                        class="instruction-slide-btn instruction-slide-next"
+                        @click.stop="showNextInstructionImage"
+                        aria-label="Следующее изображение"
+                      >
+                        ›
+                      </button>
+                    </div>
+                    <div v-if="activeInstructionImages().length > 1" class="instruction-slidebar" aria-label="Слайды инструкции">
+                      <button
+                        v-for="(image, index) in activeInstructionImages()"
+                        :key="image.path || image.url || index"
+                        type="button"
+                        class="instruction-slide-dot"
+                        :class="{ active: index === activeInstructionImageIndex }"
+                        @click="setInstructionImage(index)"
+                        :aria-label="'Открыть изображение ' + (index + 1)"
+                      ></button>
+                    </div>
+                    <div v-if="activeInstructionImages().length > 1" class="instruction-slide-counter">
+                      {{ activeInstructionImageIndex + 1 }} / {{ activeInstructionImages().length }}
+                    </div>
+                  </div>
+                  <div
+                    v-if="fullscreenInstructionImage && activeInstructionImage()"
+                    class="instruction-fullscreen-viewer"
+                    @click.self="closeFullscreenInstructionImage"
+                    @touchstart="handleInstructionTouchStart"
+                    @touchend="handleInstructionTouchEnd"
+                  >
+                    <button
+                      type="button"
+                      class="instruction-fullscreen-close"
+                      @click="closeFullscreenInstructionImage"
+                      aria-label="Закрыть полноэкранный просмотр"
+                    >
+                      ×
+                    </button>
+                    <button
+                      v-if="activeInstructionImages().length > 1"
+                      type="button"
+                      class="instruction-fullscreen-nav instruction-fullscreen-prev"
+                      @click.stop="showPrevInstructionImage"
+                      aria-label="Предыдущее изображение"
+                    >
+                      ‹
+                    </button>
+                    <img
+                      :src="activeInstructionImage().url"
+                      :alt="activeInstructionImage().name || activeInstruction.title"
+                      class="instruction-fullscreen-img"
+                      @error="onInstructionImageError($event, activeInstruction)"
+                    >
+                    <button
+                      v-if="activeInstructionImages().length > 1"
+                      type="button"
+                      class="instruction-fullscreen-nav instruction-fullscreen-next"
+                      @click.stop="showNextInstructionImage"
+                      aria-label="Следующее изображение"
+                    >
+                      ›
+                    </button>
+                    <div v-if="activeInstructionImages().length > 1" class="instruction-fullscreen-counter">
+                      {{ activeInstructionImageIndex + 1 }} / {{ activeInstructionImages().length }}
                     </div>
                   </div>
                   <p class="mb-3">
