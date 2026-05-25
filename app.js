@@ -69,6 +69,10 @@ const App = {
         fixing: false,
         difficulty: "easy",
         imageUrl: "",
+        images: [],
+        imageUploadError: "",
+        isDragActive: false,
+        uploading: false,
         hasMotor: false,
         hasSensors: false,
         format: "pdf",
@@ -381,10 +385,24 @@ const App = {
     getCollectionImage(collectionId, index) {
       if (!Array.isArray(this.groupInstructions)) return "";
       const instrs = this.groupInstructions.filter(i => i.collectionId === collectionId);
-      if (instrs[index] && instrs[index].imageUrl) {
-        return instrs[index].imageUrl;
+      if (instrs[index]) {
+        return this.primaryInstructionImage(instrs[index]);
       }
       return ""; // Or a placeholder
+    },
+    instructionImages(instruction) {
+      if (!instruction) return [];
+      if (Array.isArray(instruction.images) && instruction.images.length) {
+        return instruction.images.filter((image) => image && image.url);
+      }
+      if (instruction.imageUrl) {
+        return [{ url: instruction.imageUrl, name: instruction.title || "instruction" }];
+      }
+      return [];
+    },
+    primaryInstructionImage(instruction) {
+      const images = this.instructionImages(instruction);
+      return images.length ? images[0].url : "";
     },
     goSection(section) {
       if (section === "profile" && !this.currentUser) {
@@ -651,6 +669,12 @@ const App = {
         if (!instruction.groupId) instruction.groupId = "group-1";
         if (!instruction.difficulty) instruction.difficulty = "easy";
         if (instruction.difficulty === "advanced") instruction.difficulty = "hard";
+        if (!Array.isArray(instruction.images)) {
+          instruction.images = instruction.imageUrl ? [{ url: instruction.imageUrl, name: instruction.title || "instruction" }] : [];
+        }
+        if (!instruction.imageUrl && instruction.images.length && instruction.images[0].url) {
+          instruction.imageUrl = instruction.images[0].url;
+        }
       });
     },
     async loadStateFromSupabase() {
@@ -1037,31 +1061,114 @@ const App = {
         }
       }
     },
-    createInstruction() {
-      const categories = this.instructionForm.categories
-        .split(",")
-        .map((c) => c.trim())
-        .filter(Boolean);
-      const instruction = {
-        id: `instr-${Date.now()}`,
-        title: this.instructionForm.title,
-        categories,
-        collectionId: this.instructionForm.collectionId || "",
-        groupId: this.currentUser ? this.currentUser.groupId : "group-1",
-        slidesCount: this.instructionForm.slides,
-        complexConnectionsCount: this.instructionForm.complexConnections,
-        programComplexity: this.instructionForm.programComplexity,
-        selfAssemblyBonus: this.instructionForm.selfAssembly,
-        selfProgrammingBonus: this.instructionForm.selfProgramming,
-        fixMalfunctionBonus: this.instructionForm.fixing,
-        difficulty: this.instructionForm.difficulty,
-        imageUrl: this.instructionForm.imageUrl || "https://via.placeholder.com/600x400?text=Инструкция",
-        hasMotor: this.instructionForm.hasMotor,
-        hasSensors: this.instructionForm.hasSensors,
-        format: this.instructionForm.format,
-      };
-      this.instructions.push(instruction);
-      this.saveState();
+    sanitizeStorageSegment(value) {
+      return String(value || "file")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9._-]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 80) || "file";
+    },
+    formatFileSize(bytes) {
+      const size = Number(bytes || 0);
+      if (size < 1024) return `${size} Б`;
+      if (size < 1024 * 1024) return `${Math.round(size / 1024)} КБ`;
+      return `${(size / (1024 * 1024)).toFixed(1)} МБ`;
+    },
+    triggerInstructionImagePicker() {
+      if (this.$refs.instructionImagesInput) {
+        this.$refs.instructionImagesInput.click();
+      }
+    },
+    handleInstructionImageInput(event) {
+      this.addInstructionImageFiles(event && event.target ? event.target.files : []);
+      if (event && event.target) {
+        event.target.value = "";
+      }
+    },
+    handleInstructionImageDrop(event) {
+      this.instructionForm.isDragActive = false;
+      this.addInstructionImageFiles(event && event.dataTransfer ? event.dataTransfer.files : []);
+    },
+    addInstructionImageFiles(fileList) {
+      const files = Array.from(fileList || []);
+      if (!files.length) return;
+      this.instructionForm.imageUploadError = "";
+      const accepted = files.filter((file) => file && file.type && file.type.startsWith("image/"));
+      if (accepted.length !== files.length) {
+        this.instructionForm.imageUploadError = "Можно прикреплять только изображения.";
+      }
+      const freeSlots = Math.max(0, 200 - this.instructionForm.images.length);
+      if (accepted.length > freeSlots) {
+        this.instructionForm.imageUploadError = "К одной инструкции можно прикрепить до 200 изображений.";
+      }
+      accepted.slice(0, freeSlots).forEach((file) => {
+        this.instructionForm.images.push({
+          id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          file,
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          previewUrl: URL.createObjectURL(file),
+        });
+      });
+    },
+    removeInstructionImage(index) {
+      const [removed] = this.instructionForm.images.splice(index, 1);
+      if (removed && removed.previewUrl) {
+        URL.revokeObjectURL(removed.previewUrl);
+      }
+    },
+    clearInstructionImages() {
+      this.instructionForm.images.forEach((image) => {
+        if (image.previewUrl) URL.revokeObjectURL(image.previewUrl);
+      });
+      this.instructionForm.images = [];
+      this.instructionForm.imageUploadError = "";
+      this.instructionForm.isDragActive = false;
+      this.instructionForm.uploading = false;
+    },
+    async uploadInstructionImages(instructionId) {
+      if (!this.instructionForm.images.length) {
+        return [];
+      }
+      if (!supabase) {
+        throw new Error("Supabase не настроен для загрузки изображений.");
+      }
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData || !sessionData.session) {
+        throw new Error("Для загрузки изображений войдите через зарегистрированный аккаунт педагога.");
+      }
+      const groupId = this.currentUser ? this.currentUser.groupId : "group-1";
+      const bucket = supabase.storage.from("instruction-images");
+      const uploaded = [];
+      for (let index = 0; index < this.instructionForm.images.length; index += 1) {
+        const item = this.instructionForm.images[index];
+        const extension = (item.name.split(".").pop() || "jpg").toLowerCase();
+        const baseName = this.sanitizeStorageSegment(item.name.replace(/\.[^.]+$/, ""));
+        const path = `${this.sanitizeStorageSegment(groupId)}/${this.sanitizeStorageSegment(instructionId)}/${String(index + 1).padStart(3, "0")}-${Date.now()}-${baseName}.${extension}`;
+        const { error } = await bucket.upload(path, item.file, {
+          cacheControl: "31536000",
+          contentType: item.type || "image/jpeg",
+          upsert: false,
+        });
+        if (error) {
+          throw new Error(`Не удалось загрузить «${item.name}»: ${error.message}`);
+        }
+        const { data } = bucket.getPublicUrl(path);
+        uploaded.push({
+          url: data.publicUrl,
+          path,
+          name: item.name,
+          size: item.size,
+          type: item.type,
+          order: index,
+          uploadedAt: new Date().toISOString(),
+        });
+      }
+      return uploaded;
+    },
+    resetInstructionForm() {
       this.instructionForm.title = "";
       this.instructionForm.categories = "";
       this.instructionForm.collectionId = "";
@@ -1076,6 +1183,49 @@ const App = {
       this.instructionForm.hasMotor = false;
       this.instructionForm.hasSensors = false;
       this.instructionForm.format = "pdf";
+      this.clearInstructionImages();
+    },
+    async createInstruction() {
+      if (this.instructionForm.uploading) {
+        return;
+      }
+      const categories = this.instructionForm.categories
+        .split(",")
+        .map((c) => c.trim())
+        .filter(Boolean);
+      const instructionId = `instr-${Date.now()}`;
+      this.instructionForm.uploading = true;
+      this.instructionForm.imageUploadError = "";
+      let uploadedImages = [];
+      try {
+        uploadedImages = await this.uploadInstructionImages(instructionId);
+      } catch (error) {
+        this.instructionForm.imageUploadError = error instanceof Error ? error.message : "Не удалось загрузить изображения.";
+        this.instructionForm.uploading = false;
+        return;
+      }
+      const instruction = {
+        id: instructionId,
+        title: this.instructionForm.title,
+        categories,
+        collectionId: this.instructionForm.collectionId || "",
+        groupId: this.currentUser ? this.currentUser.groupId : "group-1",
+        slidesCount: this.instructionForm.slides,
+        complexConnectionsCount: this.instructionForm.complexConnections,
+        programComplexity: this.instructionForm.programComplexity,
+        selfAssemblyBonus: this.instructionForm.selfAssembly,
+        selfProgrammingBonus: this.instructionForm.selfProgramming,
+        fixMalfunctionBonus: this.instructionForm.fixing,
+        difficulty: this.instructionForm.difficulty,
+        imageUrl: uploadedImages.length ? uploadedImages[0].url : "",
+        images: uploadedImages,
+        hasMotor: this.instructionForm.hasMotor,
+        hasSensors: this.instructionForm.hasSensors,
+        format: this.instructionForm.format,
+      };
+      this.instructions.push(instruction);
+      this.saveState();
+      this.resetInstructionForm();
     },
     createCollection() {
       const name = this.collectionForm.name.trim();
