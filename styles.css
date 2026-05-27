@@ -1188,9 +1188,9 @@ body:has(.auth-screen) {
   padding-left: 0.5rem;
 }
 
-/* Экран выбора: контент по центру колонки, без сжатия текста под кнопки */
+/* Экран выбора: текст и кнопки идут от одной левой линии */
 .auth-left:not(.auth-left--with-form) {
-  align-items: center;
+  align-items: flex-start;
 }
 
 /* Длинная форма: прижимаем к верху области прокрутки, чтобы не обрезать поля */
@@ -1203,7 +1203,7 @@ body:has(.auth-screen) {
 .auth-hero-bunch {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   gap: clamp(1.25rem, 3vh, 2rem);
   width: 100%;
   max-width: min(100%, 34rem);
@@ -1212,7 +1212,7 @@ body:has(.auth-screen) {
 
 .auth-hero-text {
   width: 100%;
-  text-align: center;
+  text-align: left;
 }
 
 .auth-right {
@@ -1255,7 +1255,7 @@ body:has(.auth-screen) {
   font-size: clamp(2.1rem, 3.4vw, 3.2rem);
   text-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
   margin: 0 0 1rem;
-  text-align: center;
+  text-align: left;
 }
 
 .auth-subtitle {
@@ -1263,7 +1263,7 @@ body:has(.auth-screen) {
   font-weight: 700;
   font-size: clamp(1rem, 1.4vw, 1.25rem);
   margin: 0;
-  text-align: center;
+  text-align: left;
 }
 
 .auth-primary-actions {
@@ -1271,19 +1271,19 @@ body:has(.auth-screen) {
   flex-direction: row;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 1rem;
-  width: 100%;
+  width: auto;
 }
 
-/* Кнопки на всю ширину заголовка в герое */
+/* Кнопки держат общую левую линию с заголовком */
 .auth-hero-bunch .auth-primary-actions {
   flex-wrap: nowrap;
-  align-self: stretch;
+  align-self: flex-start;
 }
 
 .auth-hero-bunch .auth-main-btn {
-  flex: 1 1 0;
+  flex: 0 0 clamp(230px, 14vw, 265px);
   min-width: 0;
 }
 
@@ -1785,8 +1785,7 @@ body:has(.auth-screen) {
 
 /* Hero Stats Header */
 .hero-stats-card {
-  /* Градиент ближе к макету из Figma */
-  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 35%, #ec4899 70%, #f97316 100%);
+  background: url("./фон.jpg") 50% 50% / cover no-repeat;
   border-radius: 30px;
   padding: 3rem;
   color: white;
@@ -2150,7 +2149,7 @@ body:has(.auth-screen) {
   .hero-robot-image {
     height: 420px;
     max-height: 50vh;
-    bottom: -150px;
+    bottom: -172px;
     right: 1.5rem;
     object-fit: contain;
     object-position: right bottom;
@@ -2181,7 +2180,7 @@ body:has(.auth-screen) {
   .hero-robot-image {
     position: absolute;
     right: 50%;
-    bottom: -90px;
+    bottom: -136px;
     height: 330px;
     max-height: none;
     margin: 0;
@@ -2290,7 +2289,7 @@ body:has(.auth-screen) {
   .hero-robot-image {
     height: 300px;
     max-height: none;
-    bottom: -90px;
+    bottom: -122px;
   }
   .hero-stats-card {
     min-height: 420px;
