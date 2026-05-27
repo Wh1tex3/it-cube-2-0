@@ -92,6 +92,8 @@ const App = {
       },
       ui: {
         openSelect: "",
+        showLoginPassword: false,
+        showRegisterPassword: false,
       },
       avatarMale: maleAvatarUrl,
       avatarFemale: femaleAvatarUrl,

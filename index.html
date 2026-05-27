@@ -118,7 +118,27 @@
                     </div>
                     <div class="mb-3">
                       <label class="form-label">Пароль</label>
-                      <input v-model.trim="loginForm.password" type="password" class="form-control" required>
+                      <div class="password-field">
+                        <input
+                          v-model.trim="loginForm.password"
+                          :type="ui.showLoginPassword ? 'text' : 'password'"
+                          class="form-control"
+                          required
+                        >
+                        <button
+                          type="button"
+                          class="password-eye-btn"
+                          :class="{ active: ui.showLoginPassword }"
+                          @click="ui.showLoginPassword = !ui.showLoginPassword"
+                          :aria-label="ui.showLoginPassword ? 'Скрыть пароль' : 'Показать пароль'"
+                        >
+                          <svg class="password-eye-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"></path>
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path v-if="ui.showLoginPassword" d="M4 4l16 16"></path>
+                          </svg>
+                        </button>
+                      </div>
                     </div>
                     <div class="mb-3">
                       <label class="form-label">Роль</label>
@@ -218,7 +238,27 @@
                     </div>
                     <div class="mb-3">
                       <label class="form-label">Пароль</label>
-                      <input v-model.trim="registerForm.password" type="password" class="form-control" required>
+                      <div class="password-field">
+                        <input
+                          v-model.trim="registerForm.password"
+                          :type="ui.showRegisterPassword ? 'text' : 'password'"
+                          class="form-control"
+                          required
+                        >
+                        <button
+                          type="button"
+                          class="password-eye-btn"
+                          :class="{ active: ui.showRegisterPassword }"
+                          @click="ui.showRegisterPassword = !ui.showRegisterPassword"
+                          :aria-label="ui.showRegisterPassword ? 'Скрыть пароль' : 'Показать пароль'"
+                        >
+                          <svg class="password-eye-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"></path>
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path v-if="ui.showRegisterPassword" d="M4 4l16 16"></path>
+                          </svg>
+                        </button>
+                      </div>
                     </div>
                     <button type="submit" class="auth-submit-btn auth-submit-register">
                       Зарегистрироваться
@@ -529,12 +569,10 @@
                       <button
                         v-if="activeInstructionImages().length > 1"
                         type="button"
-                        class="instruction-slide-btn instruction-slide-prev"
+                        class="instruction-slide-zone instruction-slide-zone-prev"
                         @click.stop="showPrevInstructionImage"
                         aria-label="Предыдущее изображение"
-                      >
-                        ‹
-                      </button>
+                      ></button>
                       <img
                         :src="activeInstructionImage().url"
                         :alt="activeInstructionImage().name || activeInstruction.title"
@@ -544,12 +582,10 @@
                       <button
                         v-if="activeInstructionImages().length > 1"
                         type="button"
-                        class="instruction-slide-btn instruction-slide-next"
+                        class="instruction-slide-zone instruction-slide-zone-next"
                         @click.stop="showNextInstructionImage"
                         aria-label="Следующее изображение"
-                      >
-                        ›
-                      </button>
+                      ></button>
                     </div>
                     <div v-if="activeInstructionImages().length > 1" class="instruction-slidebar" aria-label="Слайды инструкции">
                       <button
@@ -675,15 +711,15 @@
           </div>
 
           <div v-if="currentUser">
-            <div class="row g-4 mb-5">
-              <div class="col-lg-4" v-if="currentUser.role === 'user'">
+            <div class="row g-4 mb-5 stats-summary-row">
+              <div class="col-lg-4 col-md-6 stats-summary-card" v-if="currentUser.role === 'user'">
                 <div class="stat-card-game h-100" style="border-bottom-color: var(--game-pink);">
                   <h2>Твой опыт</h2>
                   <div class="value">{{ currentUser.exp }}</div>
                   <div class="badge bg-light text-dark rounded-pill">опыт</div>
                 </div>
               </div>
-              <div class="col-lg-4" v-if="currentUser.role === 'user'">
+              <div class="col-lg-4 col-md-6 stats-summary-card" v-if="currentUser.role === 'user'">
                 <div class="stat-card-game h-100" style="border-bottom-color: var(--game-cyan);">
                   <h2>Твой уровень</h2>
                   <div class="value">{{ userLevel }}</div>
@@ -691,7 +727,7 @@
                 </div>
               </div>
 
-              <div class="col-lg-4" v-if="isAdminLike">
+              <div class="col-lg-4 col-md-6 stats-summary-card" v-if="isAdminLike">
                 <div class="stat-card-game h-100" style="border-bottom-color: var(--game-cyan);">
                   <h2>Учащихся</h2>
                   <div class="value">{{ groupUsers.length }}</div>
@@ -699,7 +735,7 @@
                 </div>
               </div>
 
-              <div class="col-lg-4" v-if="currentUser && currentUser.role === 'moderator'">
+              <div class="col-lg-4 col-md-6 stats-summary-card" v-if="currentUser && currentUser.role === 'moderator'">
                 <div class="stat-card-game h-100" style="border-bottom-color: var(--game-yellow);">
                   <h2>Всего опыт</h2>
                   <div class="value">{{ allTotalExp }}</div>
