@@ -1308,6 +1308,100 @@ const App = {
     collectionInstructionCount(collectionId) {
       return this.groupInstructions.filter((i) => i.collectionId === collectionId).length;
     },
+    canManageGroupItem(item) {
+      if (!this.currentUser || !item) return false;
+      if (this.currentUser.role !== "admin" && this.currentUser.role !== "moderator") return false;
+      return (item.groupId || "group-1") === (this.currentUser.groupId || "group-1");
+    },
+    updateInstructionCollection(instruction, collectionId) {
+      if (!this.canManageGroupItem(instruction)) return;
+      const index = this.instructions.findIndex((i) => i.id === instruction.id);
+      if (index === -1) return;
+      const nextCollectionId = collectionId || "";
+      if (nextCollectionId) {
+        const collection = this.groupCollections.find((col) => col.id === nextCollectionId);
+        if (!collection) return;
+      }
+      this.instructions[index].collectionId = nextCollectionId;
+      if (this.filters.collectionId && this.filters.collectionId !== nextCollectionId) {
+        this.filters.collectionId = "";
+      }
+      this.saveState();
+    },
+    async deleteInstruction(instruction) {
+      if (!this.canManageGroupItem(instruction)) return;
+      const confirmed = window.confirm(`Удалить инструкцию «${instruction.title}»? Это действие нельзя отменить.`);
+      if (!confirmed) return;
+      const index = this.instructions.findIndex((i) => i.id === instruction.id);
+      if (index === -1) return;
+      const [removed] = this.instructions.splice(index, 1);
+      this.users.forEach((user) => {
+        if (Array.isArray(user.completedInstructions)) {
+          user.completedInstructions = user.completedInstructions.filter((id) => id !== removed.id);
+        }
+        if (user.instructionResults && user.instructionResults[removed.id]) {
+          delete user.instructionResults[removed.id];
+        }
+      });
+      if (this.currentUser) {
+        const freshUser = this.users.find((user) => user.id === this.currentUser.id);
+        if (freshUser) {
+          this.currentUser = JSON.parse(JSON.stringify(freshUser));
+        }
+      }
+      if (this.activeInstruction && this.activeInstruction.id === removed.id) {
+        const modalElement = document.getElementById("instructionModal");
+        if (modalElement && window.bootstrap) {
+          window.bootstrap.Modal.getOrCreateInstance(modalElement).hide();
+        }
+        this.activeInstruction = null;
+        this.fullscreenInstructionImage = false;
+        document.body.classList.remove("instruction-fullscreen-open");
+      }
+      await this.deleteInstructionStorageImages(removed);
+      this.saveState();
+    },
+    async deleteInstructionStorageImages(instruction) {
+      if (!supabase || !instruction || !Array.isArray(instruction.images)) return;
+      const paths = instruction.images
+        .map((image) => image && image.path)
+        .filter(Boolean);
+      if (!paths.length) return;
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!data || !data.session) return;
+        const { error } = await supabase.storage.from("instruction-images").remove(paths);
+        if (error) {
+          console.warn("Supabase image delete failed:", error.message);
+        }
+      } catch (error) {
+        console.warn("Supabase image delete failed:", error && error.message ? error.message : error);
+      }
+    },
+    deleteCollection(collection) {
+      if (!this.canManageGroupItem(collection)) return;
+      const total = this.collectionInstructionCount(collection.id);
+      const message = total
+        ? `Удалить коллекцию «${collection.name}»? ${total} инструкций останутся в списке без коллекции.`
+        : `Удалить коллекцию «${collection.name}»?`;
+      const confirmed = window.confirm(message);
+      if (!confirmed) return;
+      const index = this.collections.findIndex((col) => col.id === collection.id);
+      if (index === -1) return;
+      this.collections.splice(index, 1);
+      this.instructions.forEach((instruction) => {
+        if (instruction.collectionId === collection.id) {
+          instruction.collectionId = "";
+        }
+      });
+      if (this.instructionForm.collectionId === collection.id) {
+        this.instructionForm.collectionId = "";
+      }
+      if (this.filters.collectionId === collection.id) {
+        this.filters.collectionId = "";
+      }
+      this.saveState();
+    },
     collectionCompletedCount(col) {
       if (!this.currentUser || !this.currentUser.completedInstructions) return 0;
       const instrIds = new Set(

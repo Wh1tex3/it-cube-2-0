@@ -1019,6 +1019,8 @@
                               <th>Слайды</th>
                               <th>Сложность</th>
                               <th>Макс. опыт</th>
+                              <th>Коллекция</th>
+                              <th>Действия</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1028,6 +1030,23 @@
                               <td>{{ instruction.slidesCount || instruction.slides }}</td>
                               <td>{{ difficultyLabel(instruction.difficulty) }}</td>
                               <td>{{ computeMaxExp(instruction) }}</td>
+                              <td class="admin-collection-cell">
+                                <select
+                                  class="form-select form-select-sm admin-row-select"
+                                  :value="instruction.collectionId || ''"
+                                  @change="updateInstructionCollection(instruction, $event.target.value)"
+                                >
+                                  <option value="">Без коллекции</option>
+                                  <option v-for="collection in groupCollections" :key="collection.id" :value="collection.id">
+                                    {{ collection.name }}
+                                  </option>
+                                </select>
+                              </td>
+                              <td class="text-end">
+                                <button type="button" class="btn btn-outline-danger btn-sm" @click="deleteInstruction(instruction)">
+                                  Удалить
+                                </button>
+                              </td>
                             </tr>
                           </tbody>
                         </table>
@@ -1072,12 +1091,18 @@
                             <tr>
                               <th>Название</th>
                               <th>Инструкций</th>
+                              <th>Действия</th>
                             </tr>
                           </thead>
                           <tbody>
                             <tr v-for="collection in groupCollections" :key="collection.id">
                               <td>{{ collection.name }}</td>
                               <td>{{ collectionInstructionCount(collection.id) }}</td>
+                              <td class="text-end">
+                                <button type="button" class="btn btn-outline-danger btn-sm" @click="deleteCollection(collection)">
+                                  Удалить
+                                </button>
+                              </td>
                             </tr>
                           </tbody>
                         </table>
