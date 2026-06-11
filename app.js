@@ -973,6 +973,7 @@ const App = {
           }
           if (supabaseUser.role === role && supabaseUser.active !== false) {
             this.currentUser = JSON.parse(JSON.stringify(supabaseUser));
+            this.currentUser.password = passwordValue;
             this.persistStateLocally();
             this.goSection("instructions");
             return;
@@ -991,6 +992,7 @@ const App = {
         return;
       }
       this.currentUser = JSON.parse(JSON.stringify(found));
+      this.currentUser.password = passwordValue;
       this.persistStateLocally();
       this.goSection("instructions");
     },
@@ -1334,19 +1336,19 @@ const App = {
         const baseName = this.sanitizeStorageSegment(item.name.replace(/\.[^.]+$/, ""));
         const path = `${this.sanitizeStorageSegment(groupId)}/${this.sanitizeStorageSegment(instructionId)}/${String(index + 1).padStart(3, "0")}-${Date.now()}-${baseName}.${extension}`;
         try {
-          return await this.uploadInstructionImageDirect(bucket, path, item, index);
+          return await this.uploadInstructionImageViaFunction({
+            item,
+            instructionId,
+            groupId,
+            order: index + 1,
+            session,
+          });
         } catch (error) {
           if (!this.isRecoverableStorageUploadError(error)) {
             throw new Error(`\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c "${item.name}": ${this.errorMessage(error)}`);
           }
           try {
-            return await this.uploadInstructionImageViaFunction({
-              item,
-              instructionId,
-              groupId,
-              order: index + 1,
-              session,
-            });
+            return await this.uploadInstructionImageDirect(bucket, path, item, index);
           } catch (fallbackError) {
             throw new Error(`\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c "${item.name}": ${this.errorMessage(fallbackError)}`);
           }
