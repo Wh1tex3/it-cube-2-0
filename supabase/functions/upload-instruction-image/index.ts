@@ -45,16 +45,45 @@ async function requireUser(req: Request) {
   return data.user;
 }
 
-async function canUploadForGroup(authUserId: string, groupId: string) {
+function canManageUploads(profile: { role?: string; group_id?: string; active?: boolean } | null, groupId: string) {
+  if (!profile || profile.active === false) return false;
+  if (profile.group_id !== groupId) return false;
+  return profile.role === "admin" || profile.role === "moderator";
+}
+
+async function canUploadForGroup(user: { id: string; user_metadata?: Record<string, unknown> }, groupId: string) {
   const { data, error } = await supabase
     .from("robot_profiles")
-    .select("role, group_id, active")
-    .eq("auth_user_id", authUserId)
+    .select("id, role, group_id, active, auth_user_id")
+    .eq("auth_user_id", user.id)
     .maybeSingle();
 
-  if (error || !data || data.active === false) return false;
-  if (data.group_id !== groupId) return false;
-  return data.role === "admin" || data.role === "moderator";
+  if (!error && canManageUploads(data, groupId)) {
+    return true;
+  }
+
+  const login = typeof user.user_metadata?.login === "string" ? user.user_metadata.login.trim() : "";
+  if (!login) return false;
+
+  const { data: profileByLogin, error: loginError } = await supabase
+    .from("robot_profiles")
+    .select("id, role, group_id, active, auth_user_id")
+    .eq("login", login)
+    .eq("group_id", groupId)
+    .maybeSingle();
+
+  if (loginError || !canManageUploads(profileByLogin, groupId)) {
+    return false;
+  }
+
+  if (!profileByLogin.auth_user_id) {
+    await supabase
+      .from("robot_profiles")
+      .update({ auth_user_id: user.id, updated_at: new Date().toISOString() })
+      .eq("id", profileByLogin.id);
+  }
+
+  return true;
 }
 
 Deno.serve(async (req) => {
@@ -88,7 +117,7 @@ Deno.serve(async (req) => {
     if (!groupId || !instructionId) {
       return json({ error: "Group and instruction are required." }, 400);
     }
-    if (!(await canUploadForGroup(user.id, groupId))) {
+    if (!(await canUploadForGroup(user, groupId))) {
       return json({ error: "Forbidden" }, 403);
     }
 

@@ -837,25 +837,58 @@ const App = {
         this.syncStateToSupabase(payload);
       }, 500);
     },
+    sessionMatchesCurrentUser(session) {
+      if (!session || !session.user || !this.currentUser) {
+        return false;
+      }
+      const sessionUser = session.user;
+      const meta = sessionUser.user_metadata || {};
+      const technicalEmail = this.normalizeEmail(this.technicalEmailForLogin(this.currentUser.login));
+      const savedEmail = this.normalizeEmail(this.currentUser.email || "");
+      const sessionEmail = this.normalizeEmail(sessionUser.email || "");
+      return (
+        (this.currentUser.supabaseAuthId && sessionUser.id === this.currentUser.supabaseAuthId) ||
+        (technicalEmail && sessionEmail === technicalEmail) ||
+        (savedEmail && sessionEmail === savedEmail) ||
+        (meta.login && this.currentUser.login && String(meta.login) === String(this.currentUser.login))
+      );
+    },
     async ensureSupabaseSessionForCurrentUser() {
       if (!supabase) {
         return null;
       }
-      const { data } = await supabase.auth.getSession();
-      if (data && data.session) {
+      const { data } = await this.withTimeout(supabase.auth.getSession(), 5000, "Session load timeout");
+      if (data && data.session && this.sessionMatchesCurrentUser(data.session)) {
         return data.session;
+      }
+      if (data && data.session && !this.sessionMatchesCurrentUser(data.session)) {
+        await supabase.auth.signOut();
       }
       if (!this.currentUser || !this.currentUser.login || !this.currentUser.password) {
         return null;
       }
-      const email = this.currentUser.email || this.technicalEmailForLogin(this.currentUser.login);
-      const { data: signInData, error } = await supabase.auth.signInWithPassword({
-        email,
-        password: this.currentUser.password,
-      });
+      const email = this.technicalEmailForLogin(this.currentUser.login) || this.currentUser.email;
+      const { data: signInData, error } = await this.withTimeout(
+        supabase.auth.signInWithPassword({
+          email,
+          password: this.currentUser.password,
+        }),
+        10000,
+        "Session restore timeout"
+      );
       if (error) {
         console.warn("Supabase session restore failed:", error.message);
         return null;
+      }
+      if (signInData && signInData.user) {
+        this.currentUser.supabaseAuthId = signInData.user.id;
+        this.currentUser.email = signInData.user.email || email;
+        const index = this.users.findIndex((u) => u.id === this.currentUser.id || u.login === this.currentUser.login);
+        if (index !== -1) {
+          this.users[index].supabaseAuthId = signInData.user.id;
+          this.users[index].email = signInData.user.email || email;
+        }
+        this.persistStateLocally();
       }
       return signInData && signInData.session ? signInData.session : null;
     },
