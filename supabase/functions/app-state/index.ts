@@ -35,19 +35,32 @@ async function requireUser(req: Request) {
 
 async function loadState(req: Request) {
   const viewer = await requireUser(req);
-  const [groups, profiles, collections, instructions, results] = await Promise.all([
+  const viewerMetadata = viewer?.user_metadata as Record<string, unknown> | undefined;
+  let viewerGroupId = viewerMetadata?.group_id ? String(viewerMetadata.group_id) : "";
+  if (viewer) {
+    const { data: viewerProfile } = await supabase
+      .from("robot_profiles")
+      .select("group_id")
+      .eq("auth_user_id", viewer.id)
+      .maybeSingle();
+    if (!viewerGroupId && viewerProfile?.group_id) {
+      viewerGroupId = String(viewerProfile.group_id);
+    }
+  }
+  const [groups, profiles, collections, instructions] = await Promise.all([
     supabase.from("robot_groups").select("*").order("created_at", { ascending: true }),
-    viewer
-      ? supabase.from("robot_profiles").select("*").order("created_at", { ascending: true })
+    viewer && viewerGroupId
+      ? supabase.from("robot_profiles").select("*").eq("group_id", viewerGroupId).order("created_at", { ascending: true })
       : Promise.resolve({ data: [], error: null }),
-    supabase.from("robot_collections").select("*").order("created_at", { ascending: true }),
-    supabase.from("robot_instructions").select("*").order("created_at", { ascending: true }),
-    viewer
-      ? supabase.from("robot_instruction_results").select("*").order("created_at", { ascending: true })
+    viewer && viewerGroupId
+      ? supabase.from("robot_collections").select("*").eq("group_id", viewerGroupId).order("created_at", { ascending: true })
+      : Promise.resolve({ data: [], error: null }),
+    viewer && viewerGroupId
+      ? supabase.from("robot_instructions").select("*").eq("group_id", viewerGroupId).order("created_at", { ascending: true })
       : Promise.resolve({ data: [], error: null }),
   ]);
 
-  const error = groups.error || profiles.error || collections.error || instructions.error || results.error;
+  const error = groups.error || profiles.error || collections.error || instructions.error;
   if (error) throw error;
 
   const users = (profiles.data || []).map((row) => ({
@@ -68,6 +81,11 @@ async function loadState(req: Request) {
     createdAt: row.payload?.createdAt || row.created_at,
   }));
   const userById = new Map(users.map((user) => [user.id, user]));
+  const userIds = users.map((user) => user.id).filter(Boolean);
+  const results = userIds.length
+    ? await supabase.from("robot_instruction_results").select("*").in("user_id", userIds).order("created_at", { ascending: true })
+    : { data: [], error: null };
+  if (results.error) throw results.error;
 
   for (const result of results.data || []) {
     const user = userById.get(result.user_id);
@@ -210,6 +228,58 @@ async function saveState(state: Record<string, unknown>) {
   if (resultRows.length) {
     const { error } = await supabase.from("robot_instruction_results").upsert(resultRows, { onConflict: "user_id,instruction_id" });
     if (error) throw error;
+  }
+
+  const managedGroupIds = new Set<string>();
+  for (const user of users) {
+    if (user.groupId) managedGroupIds.add(String(user.groupId));
+  }
+  for (const collection of collections) {
+    if (collection.groupId) managedGroupIds.add(String(collection.groupId));
+  }
+  for (const instruction of instructions) {
+    if (instruction.groupId) managedGroupIds.add(String(instruction.groupId));
+  }
+
+  for (const groupId of managedGroupIds) {
+    const instructionIds = new Set(instructions
+      .filter((instruction) => String(instruction.groupId || "group-1") === groupId && instruction.id)
+      .map((instruction) => String(instruction.id)));
+    const collectionIds = new Set(collections
+      .filter((collection) => String(collection.groupId || "group-1") === groupId && collection.id)
+      .map((collection) => String(collection.id)));
+
+    const { data: existingInstructions, error: existingInstructionsError } = await supabase
+      .from("robot_instructions")
+      .select("id")
+      .eq("group_id", groupId);
+    if (existingInstructionsError) throw existingInstructionsError;
+    const staleInstructionIds = (existingInstructions || [])
+      .map((row) => String(row.id))
+      .filter((id) => !instructionIds.has(id));
+    if (staleInstructionIds.length) {
+      const { error: instructionDeleteError } = await supabase
+        .from("robot_instructions")
+        .delete()
+        .in("id", staleInstructionIds);
+      if (instructionDeleteError) throw instructionDeleteError;
+    }
+
+    const { data: existingCollections, error: existingCollectionsError } = await supabase
+      .from("robot_collections")
+      .select("id")
+      .eq("group_id", groupId);
+    if (existingCollectionsError) throw existingCollectionsError;
+    const staleCollectionIds = (existingCollections || [])
+      .map((row) => String(row.id))
+      .filter((id) => !collectionIds.has(id));
+    if (staleCollectionIds.length) {
+      const { error: collectionDeleteError } = await supabase
+        .from("robot_collections")
+        .delete()
+        .in("id", staleCollectionIds);
+      if (collectionDeleteError) throw collectionDeleteError;
+    }
   }
 }
 

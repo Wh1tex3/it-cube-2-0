@@ -99,6 +99,7 @@ const App = {
       avatarFemale: femaleAvatarUrl,
       backendHydrating: false,
       backendSaveTimer: null,
+      backendSaveInFlight: null,
     };
   },
   computed: {
@@ -699,6 +700,30 @@ const App = {
       }
       return result.user;
     },
+    generateGroupId() {
+      return `group-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    },
+    generateGroupCode() {
+      let code = "";
+      do {
+        code = String(1000 + Math.floor(Math.random() * 9000));
+      } while (this.groups.some((group) => String(group.code) === code));
+      return code;
+    },
+    buildGroupFromAuthMetadata(meta, fallbackName = "") {
+      const groupId = meta && meta.group_id ? String(meta.group_id) : "";
+      if (!groupId) return null;
+      const existing = this.groups.find((group) => group.id === groupId);
+      if (existing) return existing;
+      const group = {
+        id: groupId,
+        code: meta.group_code ? String(meta.group_code) : this.generateGroupCode(),
+        name: meta.group_name ? String(meta.group_name) : "Моё объединение",
+        teacherName: meta.full_name ? String(meta.full_name) : fallbackName,
+      };
+      this.groups.push(group);
+      return group;
+    },
     statePayload() {
       return {
         users: this.users,
@@ -763,10 +788,16 @@ const App = {
           return false;
         }
         this.backendHydrating = true;
+        if (Array.isArray(parsed.groups) && parsed.groups.length > 0) {
+          this.groups = parsed.groups;
+        }
+        if (!token) {
+          window.localStorage.setItem("robot-site-state", JSON.stringify(this.statePayload()));
+          return true;
+        }
         if (Array.isArray(parsed.users) && parsed.users.length > 0) {
           this.users = parsed.users;
         }
-        this.groups = Array.isArray(parsed.groups) && parsed.groups.length > 0 ? parsed.groups : this.groups;
         this.instructions = parsed.instructions || [];
         this.collections = parsed.collections || [];
         this.normalizeLoadedData();
@@ -796,28 +827,67 @@ const App = {
         this.syncStateToSupabase(payload);
       }, 500);
     },
+    async ensureSupabaseSessionForCurrentUser() {
+      if (!supabase) {
+        return null;
+      }
+      const { data } = await supabase.auth.getSession();
+      if (data && data.session) {
+        return data.session;
+      }
+      if (!this.currentUser || !this.currentUser.login || !this.currentUser.password) {
+        return null;
+      }
+      const email = this.currentUser.email || this.technicalEmailForLogin(this.currentUser.login);
+      const { data: signInData, error } = await supabase.auth.signInWithPassword({
+        email,
+        password: this.currentUser.password,
+      });
+      if (error) {
+        console.warn("Supabase session restore failed:", error.message);
+        return null;
+      }
+      return signInData && signInData.session ? signInData.session : null;
+    },
     async syncStateToSupabase(payload) {
       if (!supabase || !supabaseFunctionsUrl) {
         return;
       }
-      const { data } = await supabase.auth.getSession();
-      const token = data && data.session ? data.session.access_token : "";
-      if (!token) {
+      try {
+        const session = await this.ensureSupabaseSessionForCurrentUser();
+        if (!session || !session.access_token) {
+          return;
+        }
+        const response = await fetch(`${supabaseFunctionsUrl}/app-state`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: supabasePublishableKey,
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+          const result = await response.json().catch(() => ({}));
+          console.warn("Supabase state save failed:", result.error || response.statusText);
+        }
+      } catch (error) {
+        console.warn("Supabase state save failed:", error && error.message ? error.message : error);
+      }
+    },
+    async saveStateNow() {
+      const payload = this.statePayload();
+      window.localStorage.setItem("robot-site-state", JSON.stringify(payload));
+      if (this.backendSaveTimer) {
+        window.clearTimeout(this.backendSaveTimer);
+        this.backendSaveTimer = null;
+      }
+      if (this.backendHydrating) {
         return;
       }
-      const response = await fetch(`${supabaseFunctionsUrl}/app-state`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: supabasePublishableKey,
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) {
-        const result = await response.json().catch(() => ({}));
-        console.warn("Supabase state save failed:", result.error || response.statusText);
-      }
+      this.backendSaveInFlight = this.syncStateToSupabase(payload);
+      await this.backendSaveInFlight;
+      this.backendSaveInFlight = null;
     },
     async handleLogin() {
       this.authError = "";
@@ -840,7 +910,12 @@ const App = {
             (u.email && this.normalizeEmail(u.email) === technicalEmail)
           ));
           if (!supabaseUser) {
-            const group = this.groups.find((g) => g.id === meta.group_id) || this.groups[0];
+            const group = this.buildGroupFromAuthMetadata(meta, meta.full_name || loginValue);
+            if (!group) {
+              this.authError = "Не удалось найти объединение аккаунта. Проверьте код объединения у педагога.";
+              await supabase.auth.signOut();
+              return;
+            }
             const now = new Date();
             const activeUntil = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 90);
             supabaseUser = {
@@ -851,7 +926,7 @@ const App = {
               login: meta.login || data.user.email || loginValue,
               password: passwordValue,
               role: meta.role || role,
-              groupId: group ? group.id : "group-1",
+              groupId: group.id,
               exp: 0,
               completedInstructions: [],
               instructionResults: {},
@@ -864,11 +939,11 @@ const App = {
               age: 0,
             };
             this.users.push(supabaseUser);
-            this.saveState();
+            await this.saveStateNow();
           }
           if (supabaseUser.role === role && supabaseUser.active !== false) {
             this.currentUser = JSON.parse(JSON.stringify(supabaseUser));
-            this.saveState();
+            await this.saveStateNow();
             this.goSection("instructions");
             return;
           }
@@ -925,8 +1000,8 @@ const App = {
           this.registerError = "Укажите название объединения.";
           return;
         }
-        const newGroupId = `group-${Date.now()}`;
-        const newCode = String(1000 + Math.floor(Math.random() * 9000));
+        const newGroupId = this.generateGroupId();
+        const newCode = this.generateGroupCode();
         group = {
           id: newGroupId,
           code: newCode,
@@ -1018,8 +1093,8 @@ const App = {
         this.groups.push(pendingGroup);
       }
       this.users.push(newUser);
-      this.saveState();
       this.currentUser = JSON.parse(JSON.stringify(newUser));
+      await this.saveStateNow();
       this.goSection("instructions");
       this.registerForm.lastName = "";
       this.registerForm.firstName = "";
@@ -1199,8 +1274,8 @@ const App = {
       if (!supabase) {
         throw new Error("Supabase не настроен для загрузки изображений.");
       }
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (!sessionData || !sessionData.session) {
+      const session = await this.ensureSupabaseSessionForCurrentUser();
+      if (!session) {
         throw new Error("Для загрузки изображений войдите через зарегистрированный аккаунт педагога.");
       }
       const groupId = this.currentUser ? this.currentUser.groupId : "group-1";
@@ -1288,10 +1363,10 @@ const App = {
         format: this.instructionForm.format,
       };
       this.instructions.push(instruction);
-      this.saveState();
+      await this.saveStateNow();
       this.resetInstructionForm();
     },
-    createCollection() {
+    async createCollection() {
       const name = this.collectionForm.name.trim();
       if (!name || !this.currentUser) {
         return;
@@ -1302,7 +1377,7 @@ const App = {
         groupId: this.currentUser.groupId,
       };
       this.collections.push(collection);
-      this.saveState();
+      await this.saveStateNow();
       this.collectionForm.name = "";
     },
     collectionInstructionCount(collectionId) {
@@ -1326,7 +1401,7 @@ const App = {
       if (this.filters.collectionId && this.filters.collectionId !== nextCollectionId) {
         this.filters.collectionId = "";
       }
-      this.saveState();
+      this.saveStateNow();
     },
     async deleteInstruction(instruction) {
       if (!this.canManageGroupItem(instruction)) return;
@@ -1359,7 +1434,7 @@ const App = {
         document.body.classList.remove("instruction-fullscreen-open");
       }
       await this.deleteInstructionStorageImages(removed);
-      this.saveState();
+      await this.saveStateNow();
     },
     async deleteInstructionStorageImages(instruction) {
       if (!supabase || !instruction || !Array.isArray(instruction.images)) return;
@@ -1368,8 +1443,8 @@ const App = {
         .filter(Boolean);
       if (!paths.length) return;
       try {
-        const { data } = await supabase.auth.getSession();
-        if (!data || !data.session) return;
+        const session = await this.ensureSupabaseSessionForCurrentUser();
+        if (!session) return;
         const { error } = await supabase.storage.from("instruction-images").remove(paths);
         if (error) {
           console.warn("Supabase image delete failed:", error.message);
@@ -1378,7 +1453,7 @@ const App = {
         console.warn("Supabase image delete failed:", error && error.message ? error.message : error);
       }
     },
-    deleteCollection(collection) {
+    async deleteCollection(collection) {
       if (!this.canManageGroupItem(collection)) return;
       const total = this.collectionInstructionCount(collection.id);
       const message = total
@@ -1400,7 +1475,7 @@ const App = {
       if (this.filters.collectionId === collection.id) {
         this.filters.collectionId = "";
       }
-      this.saveState();
+      await this.saveStateNow();
     },
     collectionCompletedCount(col) {
       if (!this.currentUser || !this.currentUser.completedInstructions) return 0;
@@ -1724,7 +1799,7 @@ const App = {
     },
     async importProjectlego() {
       let importedAny = false;
-      const gid = (this.currentUser && this.currentUser.groupId) || "group-1";
+      const gid = "group-1";
       try {
         const base = "/Projectlego/";
         const resp = await fetch(base + "index.html");
@@ -1888,6 +1963,12 @@ const App = {
       } catch {}
       this.importProjectlego();
     },
+    hasProjectlegoStatic() {
+      return this.instructions.some((instruction) => (
+        String(instruction.id || "").startsWith("pl-") &&
+        (instruction.groupId || "group-1") === "group-1"
+      ));
+    },
     seedInitialData() {
       const now = new Date();
       const long = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 365);
@@ -1979,14 +2060,15 @@ const App = {
   },
   mounted() {
     this.loadState();
-    this.seedProjectlegoStatic();
+    if (!this.hasProjectlegoStatic()) {
+      this.seedProjectlegoStatic();
+    }
     this.checkSupabaseConnection();
     const savedTheme = window.localStorage.getItem("site-theme");
     if (savedTheme === "dark" || savedTheme === "light") {
       this.theme = savedTheme;
     }
     this.applyTheme();
-    this.importProjectlego();
     this.loadStateFromSupabase();
     this._clickOutsideHandler = (e) => {
       const target = e.target;
