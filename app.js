@@ -1272,11 +1272,11 @@ const App = {
         return [];
       }
       if (!supabase) {
-        throw new Error("Supabase не настроен для загрузки изображений.");
+        throw new Error("\u0053\u0075\u0070\u0061\u0062\u0061\u0073\u0065 \u043d\u0435 \u043d\u0430\u0441\u0442\u0440\u043e\u0435\u043d \u0434\u043b\u044f \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0438 \u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0439.");
       }
       const session = await this.ensureSupabaseSessionForCurrentUser();
       if (!session) {
-        throw new Error("Для загрузки изображений войдите через зарегистрированный аккаунт педагога.");
+        throw new Error("\u0414\u043b\u044f \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0438 \u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0439 \u0432\u043e\u0439\u0434\u0438\u0442\u0435 \u0447\u0435\u0440\u0435\u0437 \u0437\u0430\u0440\u0435\u0433\u0438\u0441\u0442\u0440\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u044b\u0439 \u0430\u043a\u043a\u0430\u0443\u043d\u0442 \u043f\u0435\u0434\u0430\u0433\u043e\u0433\u0430.");
       }
       const groupId = this.currentUser ? this.currentUser.groupId : "group-1";
       const bucket = supabase.storage.from("instruction-images");
@@ -1286,26 +1286,92 @@ const App = {
         const extension = (item.name.split(".").pop() || "jpg").toLowerCase();
         const baseName = this.sanitizeStorageSegment(item.name.replace(/\.[^.]+$/, ""));
         const path = `${this.sanitizeStorageSegment(groupId)}/${this.sanitizeStorageSegment(instructionId)}/${String(index + 1).padStart(3, "0")}-${Date.now()}-${baseName}.${extension}`;
-        const { error } = await bucket.upload(path, item.file, {
-          cacheControl: "31536000",
-          contentType: item.type || "image/jpeg",
-          upsert: false,
-        });
-        if (error) {
-          throw new Error(`Не удалось загрузить «${item.name}»: ${error.message}`);
+        try {
+          uploaded.push(await this.uploadInstructionImageDirect(bucket, path, item, index));
+        } catch (error) {
+          if (!this.isRecoverableStorageUploadError(error)) {
+            throw new Error(`\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c "${item.name}": ${this.errorMessage(error)}`);
+          }
+          try {
+            uploaded.push(await this.uploadInstructionImageViaFunction({
+              item,
+              instructionId,
+              groupId,
+              order: index + 1,
+              session,
+            }));
+          } catch (fallbackError) {
+            throw new Error(`\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c "${item.name}": ${this.errorMessage(fallbackError)}`);
+          }
         }
-        const { data } = bucket.getPublicUrl(path);
-        uploaded.push({
-          url: data.publicUrl,
-          path,
-          name: item.name,
-          size: item.size,
-          type: item.type,
-          order: index,
-          uploadedAt: new Date().toISOString(),
-        });
       }
       return uploaded;
+    },
+    async uploadInstructionImageDirect(bucket, path, item, index) {
+      const { error } = await bucket.upload(path, item.file, {
+        cacheControl: "31536000",
+        contentType: item.type || "image/jpeg",
+        upsert: false,
+      });
+      if (error) {
+        throw error;
+      }
+      const { data } = bucket.getPublicUrl(path);
+      return {
+        url: data.publicUrl,
+        path,
+        name: item.name,
+        size: item.size,
+        type: item.type,
+        order: index,
+        uploadedAt: new Date().toISOString(),
+      };
+    },
+    async uploadInstructionImageViaFunction({ item, instructionId, groupId, order, session }) {
+      if (!supabaseFunctionsUrl) {
+        throw new Error("\u0053\u0075\u0070\u0061\u0062\u0061\u0073\u0065 \u0045\u0064\u0067\u0065 \u0046\u0075\u006e\u0063\u0074\u0069\u006f\u006e \u043d\u0435 \u043d\u0430\u0441\u0442\u0440\u043e\u0435\u043d\u0430.");
+      }
+      const formData = new FormData();
+      formData.append("file", item.file, item.name);
+      formData.append("groupId", groupId);
+      formData.append("instructionId", instructionId);
+      formData.append("order", String(order));
+      const response = await fetch(`${supabaseFunctionsUrl}/upload-instruction-image`, {
+        method: "POST",
+        headers: {
+          apikey: supabasePublishableKey,
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: formData,
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result.error || response.statusText || "Upload failed");
+      }
+      return {
+        url: result.publicUrl,
+        path: result.path,
+        name: result.name || item.name,
+        size: result.size || item.size,
+        type: result.type || item.type,
+        order: order - 1,
+        uploadedAt: result.uploadedAt || new Date().toISOString(),
+      };
+    },
+    isRecoverableStorageUploadError(error) {
+      const message = this.errorMessage(error).toLowerCase();
+      return (
+        message.includes("failed to fetch") ||
+        message.includes("networkerror") ||
+        message.includes("network request failed") ||
+        message.includes("load failed") ||
+        message.includes("fetch failed")
+      );
+    },
+    errorMessage(error) {
+      if (!error) return "\u043d\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043d\u0430\u044f \u043e\u0448\u0438\u0431\u043a\u0430";
+      if (typeof error === "string") return error;
+      return error.message || String(error);
     },
     resetInstructionForm() {
       this.instructionForm.title = "";
