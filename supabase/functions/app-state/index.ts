@@ -131,6 +131,12 @@ async function saveState(state: Record<string, unknown>) {
   const users = Array.isArray(state.users) ? state.users as Array<Record<string, unknown>> : [];
   const collections = Array.isArray(state.collections) ? state.collections as Array<Record<string, unknown>> : [];
   const instructions = Array.isArray(state.instructions) ? state.instructions as Array<Record<string, unknown>> : [];
+  const deletedInstructionIds = Array.isArray(state.deletedInstructionIds)
+    ? (state.deletedInstructionIds as Array<unknown>).map((id) => String(id)).filter(Boolean)
+    : [];
+  const deletedCollectionIds = Array.isArray(state.deletedCollectionIds)
+    ? (state.deletedCollectionIds as Array<unknown>).map((id) => String(id)).filter(Boolean)
+    : [];
 
   if (groups.length) {
     const rows = groups.filter((group) => group.id).map((group) => cleanObject({
@@ -221,65 +227,25 @@ async function saveState(state: Record<string, unknown>) {
     }
   }
 
-  if (users.length) {
-    const userIds = users.filter((user) => user.id).map((user) => String(user.id));
-    await supabase.from("robot_instruction_results").delete().in("user_id", userIds);
-  }
   if (resultRows.length) {
     const { error } = await supabase.from("robot_instruction_results").upsert(resultRows, { onConflict: "user_id,instruction_id" });
     if (error) throw error;
   }
 
-  const managedGroupIds = new Set<string>();
-  for (const user of users) {
-    if (user.groupId) managedGroupIds.add(String(user.groupId));
-  }
-  for (const collection of collections) {
-    if (collection.groupId) managedGroupIds.add(String(collection.groupId));
-  }
-  for (const instruction of instructions) {
-    if (instruction.groupId) managedGroupIds.add(String(instruction.groupId));
+  if (deletedInstructionIds.length) {
+    await supabase.from("robot_instruction_results").delete().in("instruction_id", deletedInstructionIds);
+    const { error } = await supabase.from("robot_instructions").delete().in("id", deletedInstructionIds);
+    if (error) throw error;
   }
 
-  for (const groupId of managedGroupIds) {
-    const instructionIds = new Set(instructions
-      .filter((instruction) => String(instruction.groupId || "group-1") === groupId && instruction.id)
-      .map((instruction) => String(instruction.id)));
-    const collectionIds = new Set(collections
-      .filter((collection) => String(collection.groupId || "group-1") === groupId && collection.id)
-      .map((collection) => String(collection.id)));
-
-    const { data: existingInstructions, error: existingInstructionsError } = await supabase
+  if (deletedCollectionIds.length) {
+    const { error: updateError } = await supabase
       .from("robot_instructions")
-      .select("id")
-      .eq("group_id", groupId);
-    if (existingInstructionsError) throw existingInstructionsError;
-    const staleInstructionIds = (existingInstructions || [])
-      .map((row) => String(row.id))
-      .filter((id) => !instructionIds.has(id));
-    if (staleInstructionIds.length) {
-      const { error: instructionDeleteError } = await supabase
-        .from("robot_instructions")
-        .delete()
-        .in("id", staleInstructionIds);
-      if (instructionDeleteError) throw instructionDeleteError;
-    }
-
-    const { data: existingCollections, error: existingCollectionsError } = await supabase
-      .from("robot_collections")
-      .select("id")
-      .eq("group_id", groupId);
-    if (existingCollectionsError) throw existingCollectionsError;
-    const staleCollectionIds = (existingCollections || [])
-      .map((row) => String(row.id))
-      .filter((id) => !collectionIds.has(id));
-    if (staleCollectionIds.length) {
-      const { error: collectionDeleteError } = await supabase
-        .from("robot_collections")
-        .delete()
-        .in("id", staleCollectionIds);
-      if (collectionDeleteError) throw collectionDeleteError;
-    }
+      .update({ collection_id: null, updated_at: new Date().toISOString() })
+      .in("collection_id", deletedCollectionIds);
+    if (updateError) throw updateError;
+    const { error } = await supabase.from("robot_collections").delete().in("id", deletedCollectionIds);
+    if (error) throw error;
   }
 }
 

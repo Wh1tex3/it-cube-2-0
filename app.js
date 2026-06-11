@@ -79,6 +79,7 @@ const App = {
       },
       collectionForm: {
         name: "",
+        error: "",
       },
       activeInstruction: null,
       activeInstructionImageIndex: 0,
@@ -724,13 +725,20 @@ const App = {
       this.groups.push(group);
       return group;
     },
-    statePayload() {
-      return {
+    statePayload(extra = {}) {
+      const payload = {
         users: this.users,
         instructions: this.instructions,
         collections: this.collections,
         groups: this.groups,
       };
+      if (Array.isArray(extra.deletedInstructionIds) && extra.deletedInstructionIds.length) {
+        payload.deletedInstructionIds = extra.deletedInstructionIds;
+      }
+      if (Array.isArray(extra.deletedCollectionIds) && extra.deletedCollectionIds.length) {
+        payload.deletedCollectionIds = extra.deletedCollectionIds;
+      }
+      return payload;
     },
     normalizeLoadedData() {
       this.users.forEach((u) => {
@@ -808,9 +816,13 @@ const App = {
         this.collections = parsed.collections || [];
         this.normalizeLoadedData();
         if (this.currentUser) {
+          const currentPassword = this.currentUser.password;
           const freshUser = this.users.find((u) => u.id === this.currentUser.id || u.login === this.currentUser.login);
           if (freshUser) {
             this.currentUser = JSON.parse(JSON.stringify(freshUser));
+            if (currentPassword && !this.currentUser.password) {
+              this.currentUser.password = currentPassword;
+            }
           }
         }
         window.localStorage.setItem("robot-site-state", JSON.stringify(this.statePayload()));
@@ -834,7 +846,9 @@ const App = {
         window.clearTimeout(this.backendSaveTimer);
       }
       this.backendSaveTimer = window.setTimeout(() => {
-        this.syncStateToSupabase(payload);
+        this.syncStateToSupabase(payload).catch((error) => {
+          console.warn("Supabase state save failed:", error && error.message ? error.message : error);
+        });
       }, 500);
     },
     sessionMatchesCurrentUser(session) {
@@ -894,32 +908,29 @@ const App = {
     },
     async syncStateToSupabase(payload) {
       if (!supabase || !supabaseFunctionsUrl) {
-        return;
+        return false;
       }
-      try {
-        const session = await this.ensureSupabaseSessionForCurrentUser();
-        if (!session || !session.access_token) {
-          return;
-        }
-        const response = await fetch(`${supabaseFunctionsUrl}/app-state`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: supabasePublishableKey,
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify(payload),
-        });
-        if (!response.ok) {
-          const result = await response.json().catch(() => ({}));
-          console.warn("Supabase state save failed:", result.error || response.statusText);
-        }
-      } catch (error) {
-        console.warn("Supabase state save failed:", error && error.message ? error.message : error);
+      const session = await this.ensureSupabaseSessionForCurrentUser();
+      if (!session || !session.access_token) {
+        throw new Error("Supabase session is not available.");
       }
+      const response = await fetch(`${supabaseFunctionsUrl}/app-state`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: supabasePublishableKey,
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || response.statusText || "Supabase state save failed.");
+      }
+      return true;
     },
-    async saveStateNow() {
-      const payload = this.statePayload();
+    async saveStateNow(extra = {}) {
+      const payload = this.statePayload(extra);
       window.localStorage.setItem("robot-site-state", JSON.stringify(payload));
       if (this.backendSaveTimer) {
         window.clearTimeout(this.backendSaveTimer);
@@ -929,8 +940,11 @@ const App = {
         return;
       }
       this.backendSaveInFlight = this.syncStateToSupabase(payload);
-      await this.backendSaveInFlight;
-      this.backendSaveInFlight = null;
+      try {
+        return await this.backendSaveInFlight;
+      } finally {
+        this.backendSaveInFlight = null;
+      }
     },
     persistStateLocally() {
       window.localStorage.setItem("robot-site-state", JSON.stringify(this.statePayload()));
@@ -1538,7 +1552,14 @@ const App = {
         format: this.instructionForm.format,
       };
       this.instructions.push(instruction);
-      await this.saveStateNow();
+      try {
+        await this.saveStateNow();
+      } catch (error) {
+        this.instructions = this.instructions.filter((item) => item.id !== instruction.id);
+        this.instructionForm.imageUploadError = `Не удалось сохранить инструкцию в Supabase: ${error && error.message ? error.message : error}`;
+        this.instructionForm.uploading = false;
+        return;
+      }
       this.resetInstructionForm();
     },
     async createCollection() {
@@ -1546,13 +1567,21 @@ const App = {
       if (!name || !this.currentUser) {
         return;
       }
+      this.collectionForm.error = "";
       const collection = {
         id: `col-${Date.now()}`,
         name,
         groupId: this.currentUser.groupId,
       };
       this.collections.push(collection);
-      await this.saveStateNow();
+      try {
+        await this.saveStateNow();
+      } catch (error) {
+        this.collections = this.collections.filter((item) => item.id !== collection.id);
+        this.collectionForm.error = `Не удалось сохранить коллекцию в Supabase: ${error && error.message ? error.message : error}`;
+        window.alert(this.collectionForm.error);
+        return;
+      }
       this.collectionForm.name = "";
     },
     collectionInstructionCount(collectionId) {
@@ -1576,7 +1605,9 @@ const App = {
       if (this.filters.collectionId && this.filters.collectionId !== nextCollectionId) {
         this.filters.collectionId = "";
       }
-      this.saveStateNow();
+      this.saveStateNow().catch((error) => {
+        console.warn("Supabase state save failed:", error && error.message ? error.message : error);
+      });
     },
     async deleteInstruction(instruction) {
       if (!this.canManageGroupItem(instruction)) return;
@@ -1609,7 +1640,7 @@ const App = {
         document.body.classList.remove("instruction-fullscreen-open");
       }
       await this.deleteInstructionStorageImages(removed);
-      await this.saveStateNow();
+      await this.saveStateNow({ deletedInstructionIds: [removed.id] });
     },
     async deleteInstructionStorageImages(instruction) {
       if (!supabase || !instruction || !Array.isArray(instruction.images)) return;
@@ -1650,7 +1681,7 @@ const App = {
       if (this.filters.collectionId === collection.id) {
         this.filters.collectionId = "";
       }
-      await this.saveStateNow();
+      await this.saveStateNow({ deletedCollectionIds: [collection.id] });
     },
     collectionCompletedCount(col) {
       if (!this.currentUser || !this.currentUser.completedInstructions) return 0;
