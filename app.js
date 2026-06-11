@@ -763,19 +763,25 @@ const App = {
         }
       });
     },
-    async loadStateFromSupabase() {
+    async loadStateFromSupabase(timeoutMs = 12000) {
       if (!supabaseFunctionsUrl || !supabasePublishableKey) {
         return false;
       }
+      let timeoutId = null;
       try {
-        const { data } = supabase ? await supabase.auth.getSession() : { data: null };
+        const { data } = supabase
+          ? await this.withTimeout(supabase.auth.getSession(), 5000, "Session load timeout")
+          : { data: null };
         const token = data && data.session ? data.session.access_token : "";
         const headers = { apikey: supabasePublishableKey };
         if (token) {
           headers.Authorization = `Bearer ${token}`;
         }
+        const controller = new AbortController();
+        timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
         const response = await fetch(`${supabaseFunctionsUrl}/app-state`, {
           headers,
+          signal: controller.signal,
         });
         if (!response.ok) {
           return false;
@@ -810,9 +816,13 @@ const App = {
         window.localStorage.setItem("robot-site-state", JSON.stringify(this.statePayload()));
         return true;
       } catch (error) {
-        console.warn("Supabase state load failed:", error.message);
+        const message = error && error.name === "AbortError" ? "timeout" : error.message;
+        console.warn("Supabase state load failed:", message);
         return false;
       } finally {
+        if (timeoutId) {
+          window.clearTimeout(timeoutId);
+        }
         this.backendHydrating = false;
       }
     },
@@ -889,6 +899,9 @@ const App = {
       await this.backendSaveInFlight;
       this.backendSaveInFlight = null;
     },
+    persistStateLocally() {
+      window.localStorage.setItem("robot-site-state", JSON.stringify(this.statePayload()));
+    },
     async handleLogin() {
       this.authError = "";
       const { login, password, role } = this.loginForm;
@@ -898,12 +911,25 @@ const App = {
       const technicalEmail = this.technicalEmailForLogin(loginValue);
 
       if (supabase && loginValue) {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: technicalEmail,
-          password: passwordValue,
-        });
+        let data = null;
+        let error = null;
+        try {
+          const signInResult = await this.withTimeout(
+            supabase.auth.signInWithPassword({
+              email: technicalEmail,
+              password: passwordValue,
+            }),
+            10000,
+            "Auth login timeout"
+          );
+          data = signInResult.data;
+          error = signInResult.error;
+        } catch (signInError) {
+          console.warn("Supabase auth login failed:", this.errorMessage(signInError));
+          error = signInError;
+        }
         if (!error && data && data.user) {
-          await this.loadStateFromSupabase();
+          const remoteLoaded = await this.loadStateFromSupabase(10000);
           const meta = data.user.user_metadata || {};
           let supabaseUser = this.users.find((u) => (
             (u.supabaseAuthId && u.supabaseAuthId === data.user.id) ||
@@ -939,11 +965,15 @@ const App = {
               age: 0,
             };
             this.users.push(supabaseUser);
-            await this.saveStateNow();
+            if (remoteLoaded) {
+              await this.saveStateNow();
+            } else {
+              this.persistStateLocally();
+            }
           }
           if (supabaseUser.role === role && supabaseUser.active !== false) {
             this.currentUser = JSON.parse(JSON.stringify(supabaseUser));
-            await this.saveStateNow();
+            this.persistStateLocally();
             this.goSection("instructions");
             return;
           }
@@ -961,7 +991,7 @@ const App = {
         return;
       }
       this.currentUser = JSON.parse(JSON.stringify(found));
-      this.saveState();
+      this.persistStateLocally();
       this.goSection("instructions");
     },
     async handleRegister() {
@@ -1267,6 +1297,23 @@ const App = {
       this.instructionForm.isDragActive = false;
       this.instructionForm.uploading = false;
     },
+    withTimeout(promise, timeoutMs, message) {
+      return new Promise((resolve, reject) => {
+        const timeoutId = window.setTimeout(() => {
+          reject(new Error(message || "Request timed out"));
+        }, timeoutMs);
+        promise.then(
+          (value) => {
+            window.clearTimeout(timeoutId);
+            resolve(value);
+          },
+          (error) => {
+            window.clearTimeout(timeoutId);
+            reject(error);
+          }
+        );
+      });
+    },
     async uploadInstructionImages(instructionId) {
       if (!this.instructionForm.images.length) {
         return [];
@@ -1280,39 +1327,52 @@ const App = {
       }
       const groupId = this.currentUser ? this.currentUser.groupId : "group-1";
       const bucket = supabase.storage.from("instruction-images");
-      const uploaded = [];
-      for (let index = 0; index < this.instructionForm.images.length; index += 1) {
-        const item = this.instructionForm.images[index];
+      const images = this.instructionForm.images.slice();
+      const uploaded = new Array(images.length);
+      const uploadOne = async (item, index) => {
         const extension = (item.name.split(".").pop() || "jpg").toLowerCase();
         const baseName = this.sanitizeStorageSegment(item.name.replace(/\.[^.]+$/, ""));
         const path = `${this.sanitizeStorageSegment(groupId)}/${this.sanitizeStorageSegment(instructionId)}/${String(index + 1).padStart(3, "0")}-${Date.now()}-${baseName}.${extension}`;
         try {
-          uploaded.push(await this.uploadInstructionImageDirect(bucket, path, item, index));
+          return await this.uploadInstructionImageDirect(bucket, path, item, index);
         } catch (error) {
           if (!this.isRecoverableStorageUploadError(error)) {
             throw new Error(`\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c "${item.name}": ${this.errorMessage(error)}`);
           }
           try {
-            uploaded.push(await this.uploadInstructionImageViaFunction({
+            return await this.uploadInstructionImageViaFunction({
               item,
               instructionId,
               groupId,
               order: index + 1,
               session,
-            }));
+            });
           } catch (fallbackError) {
             throw new Error(`\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c "${item.name}": ${this.errorMessage(fallbackError)}`);
           }
         }
-      }
-      return uploaded;
+      };
+      let nextIndex = 0;
+      const workerCount = Math.min(4, images.length);
+      await Promise.all(Array.from({ length: workerCount }, async () => {
+        while (nextIndex < images.length) {
+          const currentIndex = nextIndex;
+          nextIndex += 1;
+          uploaded[currentIndex] = await uploadOne(images[currentIndex], currentIndex);
+        }
+      }));
+      return uploaded.filter(Boolean);
     },
     async uploadInstructionImageDirect(bucket, path, item, index) {
-      const { error } = await bucket.upload(path, item.file, {
-        cacheControl: "31536000",
-        contentType: item.type || "image/jpeg",
-        upsert: false,
-      });
+      const { error } = await this.withTimeout(
+        bucket.upload(path, item.file, {
+          cacheControl: "31536000",
+          contentType: item.type || "image/jpeg",
+          upsert: false,
+        }),
+        20000,
+        "Storage upload timeout"
+      );
       if (error) {
         throw error;
       }
@@ -1336,14 +1396,27 @@ const App = {
       formData.append("groupId", groupId);
       formData.append("instructionId", instructionId);
       formData.append("order", String(order));
-      const response = await fetch(`${supabaseFunctionsUrl}/upload-instruction-image`, {
-        method: "POST",
-        headers: {
-          apikey: supabasePublishableKey,
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: formData,
-      });
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), 45000);
+      let response;
+      try {
+        response = await fetch(`${supabaseFunctionsUrl}/upload-instruction-image`, {
+          method: "POST",
+          headers: {
+            apikey: supabasePublishableKey,
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: formData,
+          signal: controller.signal,
+        });
+      } catch (error) {
+        if (error && error.name === "AbortError") {
+          throw new Error("Upload function timeout");
+        }
+        throw error;
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(result.error || response.statusText || "Upload failed");
@@ -1365,7 +1438,8 @@ const App = {
         message.includes("networkerror") ||
         message.includes("network request failed") ||
         message.includes("load failed") ||
-        message.includes("fetch failed")
+        message.includes("fetch failed") ||
+        message.includes("timeout")
       );
     },
     errorMessage(error) {
